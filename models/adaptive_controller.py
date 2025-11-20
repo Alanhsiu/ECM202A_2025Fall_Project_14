@@ -138,9 +138,12 @@ class LayerAllocationModule(nn.Module):
         selectable_logits = logits_flat[:, selectable_indices]  # [batch, 22]
         
         # Apply Gumbel-Softmax (with noise in both training and eval)
-        gumbel_noise = -torch.log(-torch.log(torch.rand_like(selectable_logits) + 1e-10) + 1e-10)
-        logits_with_noise = (selectable_logits + gumbel_noise) / temperature
-        soft_allocation = F.softmax(logits_with_noise, dim=-1)
+        if self.training:
+            gumbel_noise = -torch.log(-torch.log(torch.rand_like(selectable_logits) + 1e-10) + 1e-10)
+            selectable_logits_with_noise = (selectable_logits + gumbel_noise) / temperature
+            soft_allocation = F.softmax(selectable_logits_with_noise, dim=-1)
+        else:
+            soft_allocation = F.softmax(selectable_logits, dim=-1)
         
         # Top-k selection (greedy)
         _, top_k_indices = torch.topk(soft_allocation, k=remaining_budget, dim=-1)

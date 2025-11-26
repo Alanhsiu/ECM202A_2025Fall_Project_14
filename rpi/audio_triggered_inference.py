@@ -13,7 +13,8 @@ import numpy as np
 import pyrealsense2 as rs
 import cv2
 import pyaudio
-from time import time
+import time
+import psutil
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.adaptive_controller import AdaptiveGestureClassifier
@@ -45,11 +46,20 @@ class LayerPlotter:
         self.depth_color = (255, 200, 0)
         self.grid_color = (50, 50, 50)
 
+        self.total_perc  = 100
+        self.cpu_history = [0]*max_history
+        self.cpu_color = (0, 255, 0)
+
+
     def update(self, rgb_val, depth_val):
         self.rgb_history.pop(0)
         self.rgb_history.append(rgb_val)
         self.depth_history.pop(0)
         self.depth_history.append(depth_val)
+
+    def update_cpu(self, cpu_val):
+        self.cpu_history.pop(0)
+        self.cpu_history.append(cpu_val)
 
     def draw(self):
         canvas = np.full((self.height, self.width, 3), self.bg_color, dtype=np.uint8)
@@ -60,11 +70,11 @@ class LayerPlotter:
 
         step_x = self.width / (self.max_history - 1)
 
-        def draw_poly(history, color):
+        def draw_poly(history, color, max_val):
             points = []
             for i, val in enumerate(history):
                 x = int(i * step_x)
-                y = self.height - int((val / self.total_layers) * (self.height - 20)) - 10
+                y = self.height - int((val / max_val) * (self.height - 20)) - 10
                 points.append((x, y))
             for i in range(len(points) - 1):
                 cv2.line(canvas, points[i], points[i+1], color, 2)
@@ -72,10 +82,12 @@ class LayerPlotter:
             cv2.putText(canvas, str(int(history[-1])), (last_pt[0]-20, last_pt[1]-10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-        draw_poly(self.rgb_history, self.rgb_color)
-        draw_poly(self.depth_history, self.depth_color)
+        draw_poly(self.rgb_history, self.rgb_color, self.total_layers)
+        draw_poly(self.depth_history, self.depth_color, self.total_layers)
+        draw_poly(self.cpu_history, self.cpu_color, 100)
         cv2.putText(canvas, "RGB Layers", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.rgb_color, 1)
         cv2.putText(canvas, "Depth Layers", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.depth_color, 1)
+        cv2.putText(canvas, "CPU (%)", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.cpu_color, 1)
         return canvas
 
 def conceptual_calculate_flops(total_layers, rgb_layers_used, depth_layers_used):
@@ -169,7 +181,11 @@ class SmartSystemController:
         try:
             while True:
                 # 1. Audio Check
+                audio_start_time = time.time()
                 current_rms = self.get_audio_rms()
+                audio_end_time = time.time()
+                audio_latency_ms = (audio_end_time - audio_start_time)*1000
+                print(f"Audio latency:{audio_latency_ms:5.1f}ms")
                 current_time = time.time()
 
                 if current_rms > AUDIO_THRESHOLD and (current_time - self.last_toggle_time > TOGGLE_COOLDOWN):
@@ -205,6 +221,7 @@ class SmartSystemController:
                         flops = conceptual_calculate_flops(self.args.total_layers, rgb_layers, depth_layers)
 
                         self.plotter.update(rgb_layers, depth_layers)
+                        self.plotter.update_cpu(psutil.cpu_percent(interval=1))
                         chart_img = self.plotter.draw()
 
                         combined_camera = np.hstack((color_image, depth_colormap))

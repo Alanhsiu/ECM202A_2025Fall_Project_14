@@ -16,11 +16,11 @@ from time import time
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.adaptive_controller import AdaptiveGestureClassifier
-from data.gesture_dataset import single_image_transform
 from data.gesture_dataset import transform_from_camera
 
 class_names = ['standing', 'left_hand', 'right_hand', 'both_hands']
 
+# --- Layer Usage Plotter Class ---
 class LayerPlotter:
     def __init__(self, max_history=50, height=200, width=640, total_layers=12):
         self.max_history = max_history
@@ -88,15 +88,14 @@ def conceptual_calculate_flops(total_layers, rgb_layers_used, depth_layers_used)
 
     return total_flops / 1e9
 
-
+# --- Inference Function ---
 def inference_stage2(model, data, device, temperature=0.5):
 
-    model.eval() 
     with torch.no_grad():
         rgb = data['rgb'].to(device)
         depth = data['depth'].to(device)
 
-        # Core: Measure model runtime (Latency)
+        # Measure model runtime (Latency)
         start_time = time()
 
         logits, layer_allocation = model(
@@ -134,8 +133,8 @@ def take_pic(model=None, device=None, args=None):
 
     # Start streaming
     pipeline.start(config)
-
     plotter = LayerPlotter(max_history=30, height=200, width=640, total_layers=args.total_layers)
+    
     while True:
         frames = pipeline.wait_for_frames()
         depth_frame = frames.get_depth_frame()

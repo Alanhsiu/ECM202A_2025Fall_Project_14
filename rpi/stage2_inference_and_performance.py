@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 import pyrealsense2 as rs
 import cv2
-import time
+from time import time
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.adaptive_controller import AdaptiveGestureClassifier
@@ -147,7 +147,7 @@ def take_pic(camera_event, model=None, device=None, args=None):
                 print(">>> [Worker] Starting Camera...")
                 pipeline.start(config)
                 is_pipeline_active = True
-                last_capture_time = time.time() - 5.0  # Force immediate capture on start
+                last_capture_time = time() - 5.0  # Force immediate capture on start
 
             frames = pipeline.wait_for_frames()
             depth_frame = frames.get_depth_frame()
@@ -167,11 +167,11 @@ def take_pic(camera_event, model=None, device=None, args=None):
             key = cv2.waitKey(1) & 0xFF
 
             
-            if time.time() - last_capture_time >= 5.0:
+            if time() - last_capture_time >= 5.0:
             # if key == ord('q'):
 
                 print("==> Captured one RGB+Depth, sending to model...")
-                last_capture_time = time.time()
+                last_capture_time = time()
 
                 data = transform_from_camera(color_image, depth_colormap)
                 pred_label, rgb_layers, depth_layers, latency_ms= inference_stage2(model, data, device)
@@ -206,7 +206,7 @@ def take_pic(camera_event, model=None, device=None, args=None):
         cv2.destroyAllWindows()
         # TODO: Reset GPIO
 
-def camera(camera_event, args):
+def camera(camera_event,camera_ready,args):
     # --- Setup and Model Loading ---
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -229,6 +229,7 @@ def camera(camera_event, args):
 
     print(f"Starting inference with Total Layers Budget: {args.total_layers}")
     model.eval()
+    camera_ready.set()
     take_pic(camera_event, model, device, args)
 
 

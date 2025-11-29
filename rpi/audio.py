@@ -7,12 +7,12 @@ import cv2
 import pyaudio
 import time
 from stage2_inference_and_performance import camera
-
+from res import worker
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ---- Shared Events ----
 camera_event = threading.Event()
-
+camera_ready = threading.Event()
 # --- Audio Settings ---
 AUDIO_THRESHOLD = 800
 TOGGLE_COOLDOWN = 5.0
@@ -41,7 +41,9 @@ def audio_listener():
         input=True,             
         frames_per_buffer=CHUNK
     )
-    audio_start_time = time.time()
+    camera_ready.wait()
+    print('Camera is ready')
+    audio_start_time = time.time()-TOGGLE_COOLDOWN
     try:
         while True:
             current_rms = get_audio_rms(stream)
@@ -64,7 +66,8 @@ def audio_listener():
 
 # ---- Main ----
 def main(args):
-    t_worker = threading.Thread(target=camera, args=(camera_event, args),daemon=True)
+    t_worker = threading.Thread(target=camera, args=(camera_event,camera_ready, args),daemon=True)
+    #t_worker = threading.Thread(target=worker, args=(camera_event,),daemon=True)
     t_audio = threading.Thread(target=audio_listener, daemon=True)
 
     t_worker.start()

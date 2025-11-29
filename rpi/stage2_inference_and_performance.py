@@ -1,18 +1,12 @@
 import os
 import sys
-
-from sklearn import pipeline
 import torch
-import torch.nn as nn
-from torch.optim import Adam
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import argparse
-import random
 import numpy as np
 import pyrealsense2 as rs
 import cv2
-from time import time
+import time
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.adaptive_controller import AdaptiveGestureClassifier
@@ -122,7 +116,7 @@ def inference_stage2(model, data, device, temperature=0.5):
     print("===> Result:", [class_names[i] for i in predicted.cpu().numpy()])
     return pred_label, rgb_layers, depth_layers, latency_ms
 
-def take_pic(model=None, device=None, args=None):
+def take_pic(camera_event, model=None, device=None, args=None):
     # Configure depth and color streams
     pipeline = rs.pipeline()
     config = rs.config()
@@ -132,67 +126,87 @@ def take_pic(model=None, device=None, args=None):
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
     # Start streaming
-    pipeline.start(config)
+    # pipeline.start(config)
     plotter = LayerPlotter(max_history=30, height=200, width=640, total_layers=args.total_layers)
     
-    while True:
-        frames = pipeline.wait_for_frames()
-        depth_frame = frames.get_depth_frame()
-        color_frame = frames.get_color_frame()
- 
-        if not color_frame or not depth_frame:
-            continue
-
-        depth_image = np.asanyarray(depth_frame.get_data())
-        color_image = np.asanyarray(color_frame.get_data())
-
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
-        chart_img = plotter.draw()
-
-        combined_camera = np.hstack((color_image, depth_colormap))
-        chart_img_resized = cv2.resize(chart_img, (combined_camera.shape[1], 200))
-        final_display = np.vstack((combined_camera, chart_img_resized))
-        cv2.imshow('ADMN Real-time Demo', final_display)
-
-        key = cv2.waitKey(1) & 0xFF
-
-        
-        # if now - last_capture_time >= 5.0:
-        if key == ord('q'):
-
-            print("==> Captured one RGB+Depth, sending to model...")
-        
-            data = transform_from_camera(color_image, depth_colormap)
-            pred_label, rgb_layers, depth_layers, latency_ms= inference_stage2(model, data, device)
-            plotter.update(rgb_layers, depth_layers)
-            flops = conceptual_calculate_flops(
-                total_layers=args.total_layers,
-                rgb_layers_used=rgb_layers,
-                depth_layers_used=depth_layers
-            )
-            print(f"===> Estimated FLOPs: {flops:.2f} GFLOPs")
-            print("===> Latency:", latency_ms, "ms")
-            updated_chart = plotter.draw()
-            updated_chart_resized = cv2.resize(updated_chart, (combined_camera.shape[1], 200))
-            
-            final_display[480:, :] = updated_chart_resized 
-
-            text = f"Pred: {pred_label} | RGB: {int(rgb_layers)} | Depth: {int(depth_layers)} | {latency_ms:.1f} ms"
-            overlay = final_display.copy()
-            cv2.rectangle(overlay, (0, 0), (1280, 60), (0, 0, 0), -1)
-            cv2.addWeighted(overlay, 0.6, final_display, 0.4, 0, final_display)
-            cv2.putText(final_display, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
-            cv2.imshow('ADMN Real-time Demo', final_display)
-            cv2.waitKey(10)
+    is_pipeline_active = False
+    camera_event.wait() # wait for the first trigger to start camera
     
-        elif key == 27:  # ESC
-            # print("Exit.")
-            pipeline.stop()
-            cv2.destroyAllWindows()
-            # print("===> Avg Latency:", lat/10, "seconds")
-            break
+    try:
+        while True:
+            if not camera_event.is_set():
+                if is_pipeline_active:
+                    print(">>> [Worker] Stopping Camera (Sleep Mode)...")
+                    pipeline.stop()
+                    is_pipeline_active = False
+                    cv2.destroyAllWindows()
+                    # TODO: Reset GPIO
+                camera_event.wait()
+                continue
+            elif is_pipeline_active == False:
+                print(">>> [Worker] Starting Camera...")
+                pipeline.start(config)
+                is_pipeline_active = True
+                last_capture_time = time.time() - 5.0  # Force immediate capture on start
 
-def main(args):
+            frames = pipeline.wait_for_frames()
+            depth_frame = frames.get_depth_frame()
+            color_frame = frames.get_color_frame()
+
+            depth_image = np.asanyarray(depth_frame.get_data())
+            color_image = np.asanyarray(color_frame.get_data())
+
+            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+            chart_img = plotter.draw()
+
+            combined_camera = np.hstack((color_image, depth_colormap))
+            chart_img_resized = cv2.resize(chart_img, (combined_camera.shape[1], 200))
+            final_display = np.vstack((combined_camera, chart_img_resized))
+            cv2.imshow('ADMN Real-time Demo', final_display)
+
+            key = cv2.waitKey(1) & 0xFF
+
+            
+            if time.time() - last_capture_time >= 5.0:
+            # if key == ord('q'):
+
+                print("==> Captured one RGB+Depth, sending to model...")
+                last_capture_time = time.time()
+
+                data = transform_from_camera(color_image, depth_colormap)
+                pred_label, rgb_layers, depth_layers, latency_ms= inference_stage2(model, data, device)
+                plotter.update(rgb_layers, depth_layers)
+                flops = conceptual_calculate_flops(
+                    total_layers=args.total_layers,
+                    rgb_layers_used=rgb_layers,
+                    depth_layers_used=depth_layers
+                )
+                print(f"===> Estimated FLOPs: {flops:.2f} GFLOPs")
+                print("===> Latency:", latency_ms, "ms")
+                updated_chart = plotter.draw()
+                updated_chart_resized = cv2.resize(updated_chart, (combined_camera.shape[1], 200))
+                
+                final_display[480:, :] = updated_chart_resized 
+
+                text = f"Pred: {pred_label} | RGB: {int(rgb_layers)} | Depth: {int(depth_layers)} | {latency_ms:.1f} ms"
+                overlay = final_display.copy()
+                cv2.rectangle(overlay, (0, 0), (1280, 60), (0, 0, 0), -1)
+                cv2.addWeighted(overlay, 0.6, final_display, 0.4, 0, final_display)
+                cv2.putText(final_display, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
+                cv2.imshow('ADMN Real-time Demo', final_display)
+                cv2.waitKey(10)
+        
+            # elif key == 27:  # ESC
+            #     pipeline.stop()
+            #     cv2.destroyAllWindows()
+            #     break
+    finally:
+        if is_pipeline_active:
+            pipeline.stop()
+        cv2.destroyAllWindows()
+        # TODO: Reset GPIO
+
+def camera(camera_event, args):
     # --- Setup and Model Loading ---
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -215,7 +229,7 @@ def main(args):
 
     print(f"Starting inference with Total Layers Budget: {args.total_layers}")
     model.eval()
-    take_pic(model, device, args)
+    take_pic(camera_event, model, device, args)
 
 
 if __name__ == "__main__":
@@ -234,4 +248,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args)
+    camera(args)

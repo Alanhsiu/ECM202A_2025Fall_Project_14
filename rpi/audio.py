@@ -67,17 +67,20 @@ class cpu_usage(object):
         return self.line, self.text_label
     
     def start(self):
-        self.ani = animation.FuncAnimation(
-            self.fig, 
-            self.update,
-            interval=self.update_interval, 
-            cache_frame_data=False
-        )
+        try:
+            self.ani = animation.FuncAnimation(
+                self.fig, 
+                self.update,
+                interval=self.update_interval, 
+                cache_frame_data=False
+            )
         
-        plt.tight_layout()
-        plt.grid(True, linestyle='--', alpha=0.5)
-        plt.show()
-
+            plt.tight_layout()
+            plt.grid(True, linestyle='--', alpha=0.5)
+            plt.show()
+        except KeyboardInterrupt:
+            plt.close('all')
+            sys.exit(0)
 
 # ---- Audio RMS Calculation ----
 def get_audio_rms(stream):
@@ -126,14 +129,17 @@ def audio_listener():
 def main(args):
     t_worker = threading.Thread(target=camera, args=(camera_event,camera_ready, args),daemon=True)
     t_audio = threading.Thread(target=audio_listener, daemon=True)
-
+    
+    
     t_worker.start()
     t_audio.start()
+    
     cpu = cpu_usage()
     cpu.start()
 
     t_worker.join()
     t_audio.join()
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Stage 2 Adaptive Controller Inference')

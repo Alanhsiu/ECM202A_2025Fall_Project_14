@@ -2,6 +2,7 @@ venv/
 
 checkpoints/
 logs/
+results/
 
 GTDM_Lowlight/__pycache__/
 GTDM_Lowlight/**/__pycache__/

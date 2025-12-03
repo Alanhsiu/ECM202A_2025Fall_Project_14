@@ -112,8 +112,8 @@ class GestureClassifier(nn.Module):
             # Depth: freeze all except last 2 layers
             for param in self.depth.parameters():
                 param.requires_grad = False
-            for param in self.depth.blocks[10].parameters():
-                param.requires_grad = True
+            # for param in self.depth.blocks[10].parameters():
+            #     param.requires_grad = True
             for param in self.depth.blocks[11].parameters():
                 param.requires_grad = True
             

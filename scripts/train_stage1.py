@@ -14,6 +14,7 @@ from tqdm import tqdm
 import argparse
 import random
 import numpy as np
+from sklearn.model_selection import train_test_split
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -60,24 +61,68 @@ def get_full_dataloaders(data_dir, batch_size=16, num_workers=4, seed=42):
     for corr_type, count in corruption_counts.items():
         print(f"  {corr_type}: {count} samples")
     
-    # MODIFIED: 80/20 split (no separate test set for small dataset)
-    # This provides more training data (192 vs 168) and larger validation set (48 vs 36)
-    total_size = len(full_dataset)
-    train_size = int(0.8 * total_size)  # 192 samples
-    val_size = total_size - train_size  # 48 samples
+    # MODIFIED: Stratified 80/20 split to ensure balanced distribution
+    # of both corruption types and classes
+    # Create stratify labels: combine corruption_type and class_name
+    stratify_labels = []
+    for sample in full_dataset.samples:
+        stratify_label = f"{sample['corruption_type']}_{sample['class_name']}"
+        stratify_labels.append(stratify_label)
     
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        full_dataset, 
-        [train_size, val_size],
-        generator=torch.Generator().manual_seed(seed)
+    # Get indices for stratified split
+    indices = list(range(len(full_dataset)))
+    train_indices, val_indices = train_test_split(
+        indices,
+        test_size=0.2,
+        stratify=stratify_labels,
+        random_state=seed,
+        shuffle=True
     )
     
-    print(f"\nSplit Strategy (80/20):")
-    print(f"  Train: {train_size} samples (80%)")
-    print(f"  Val:   {val_size} samples (20%, used as held-out test set)")
-    print(f"  Rationale: Small dataset (240 samples) requires:")
-    print(f"    - Maximum training data while maintaining held-out validation")
-    print(f"    - Sufficient validation samples for stable evaluation")
+    # Create subset datasets
+    train_dataset = torch.utils.data.Subset(full_dataset, train_indices)
+    val_dataset = torch.utils.data.Subset(full_dataset, val_indices)
+    
+    print(f"\nStratified Split Strategy (80/20):")
+    print(f"  Train: {len(train_dataset)} samples (80%)")
+    print(f"  Val:   {len(val_dataset)} samples (20%, used as held-out test set)")
+    
+    # Verify balanced distribution
+    print("\n  Verifying balanced distribution...")
+    
+    # Count by corruption type
+    train_corr_counts = {'clean': 0, 'depth_occluded': 0, 'low_light': 0}
+    val_corr_counts = {'clean': 0, 'depth_occluded': 0, 'low_light': 0}
+    train_class_counts = {'standing': 0, 'left_hand': 0, 'right_hand': 0, 'both_hands': 0}
+    val_class_counts = {'standing': 0, 'left_hand': 0, 'right_hand': 0, 'both_hands': 0}
+    
+    for idx in train_indices:
+        sample = full_dataset.samples[idx]
+        train_corr_counts[sample['corruption_type']] += 1
+        train_class_counts[sample['class_name']] += 1
+    
+    for idx in val_indices:
+        sample = full_dataset.samples[idx]
+        val_corr_counts[sample['corruption_type']] += 1
+        val_class_counts[sample['class_name']] += 1
+    
+    print("\n  Train set distribution:")
+    print(f"    Corruption: clean={train_corr_counts['clean']}, "
+          f"depth_occluded={train_corr_counts['depth_occluded']}, "
+          f"low_light={train_corr_counts['low_light']}")
+    print(f"    Classes: standing={train_class_counts['standing']}, "
+          f"left_hand={train_class_counts['left_hand']}, "
+          f"right_hand={train_class_counts['right_hand']}, "
+          f"both_hands={train_class_counts['both_hands']}")
+    
+    print("\n  Val set distribution:")
+    print(f"    Corruption: clean={val_corr_counts['clean']}, "
+          f"depth_occluded={val_corr_counts['depth_occluded']}, "
+          f"low_light={val_corr_counts['low_light']}")
+    print(f"    Classes: standing={val_class_counts['standing']}, "
+          f"left_hand={val_class_counts['left_hand']}, "
+          f"right_hand={val_class_counts['right_hand']}, "
+          f"both_hands={val_class_counts['both_hands']}")
     
     # Create dataloaders
     train_loader = torch.utils.data.DataLoader(
@@ -385,7 +430,8 @@ def main(args):
         
         # MODIFIED: Gradually increase layerdrop (optional, adaptive regularization)
         if epoch % 10 == 9 and args.layerdrop > 0:
-            new_rate = min(args.max_layerdrop, model.vision.layerdrop_rate + 0.05)
+            new_rate = min(args.max_layerdrop, model.vision.layerdrop_rate + 0.1)
+            # new_rate = min(args.max_layerdrop, model.vision.layerdrop_rate + 0.05)
             if new_rate > model.vision.layerdrop_rate:
                 model.vision.layerdrop_rate = new_rate
                 model.depth.layerdrop_rate = new_rate
@@ -428,6 +474,28 @@ def main(args):
     }, final_path)
     print(f"\n✅ Training completed! Models saved to {args.output_dir}")
     print(f"Best validation accuracy: {best_val_acc:.2f}%")
+    
+    # Save results as JSON (Upper Bound baseline)
+    import json
+    results = {
+        'mode': 'upper_bound',
+        'description': 'Stage 1 with all 24 layers (RGB 12 + Depth 12)',
+        'rgb_layers': 12,
+        'depth_layers': 12,
+        'total_layers': 24,
+        'best_val_accuracy': best_val_acc,
+        'test_accuracy': test_acc,
+        'test_loss': test_loss,
+        'per_corruption_accuracy': test_corruption_acc,
+        'per_class_accuracy': {
+            classes[i]: test_class_acc[i] for i in range(len(classes))
+        }
+    }
+    
+    results_path = os.path.join(args.output_dir, 'stage1_upper_bound.json')
+    with open(results_path, 'w') as f:
+        json.dump(results, f, indent=2)
+    print(f"Results saved to {results_path}")
     
     writer.close()
 

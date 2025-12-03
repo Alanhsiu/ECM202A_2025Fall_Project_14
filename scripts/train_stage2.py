@@ -15,6 +15,7 @@ import argparse
 import random
 import numpy as np
 from PIL import Image
+from sklearn.model_selection import train_test_split
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -138,7 +139,8 @@ class CorruptedGestureDataset(Dataset):
 def get_corrupted_dataloaders(data_dir, batch_size=16, num_workers=0, seed=42):
     """
     Create dataloaders for corrupted gesture dataset
-    MODIFIED: Use 80/20 split (same as Stage 1) instead of 70/15/15
+    MODIFIED: Use stratified 80/20 split to ensure balanced distribution
+    of both corruption types and classes
     """
     # Create dataset
     dataset = CorruptedGestureDataset(
@@ -150,21 +152,68 @@ def get_corrupted_dataloaders(data_dir, batch_size=16, num_workers=0, seed=42):
     print(f"Loading corrupted dataset from {data_dir}...")
     print(f"Loaded {len(dataset)} samples")
     
-    # MODIFIED: 80/20 split (same as Stage 1 for consistency)
-    total_size = len(dataset)
-    train_size = int(0.8 * total_size)  # 192 samples
-    val_size = total_size - train_size  # 48 samples
+    # Create stratify labels: combine corruption_type and class_name
+    # Format: "{corruption_type}_{class_name}" to ensure balanced split
+    stratify_labels = []
+    for sample in dataset.samples:
+        stratify_label = f"{sample['corruption_type']}_{sample['class_name']}"
+        stratify_labels.append(stratify_label)
     
-    # MODIFIED: Only 2-way split (no separate test set)
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        dataset, 
-        [train_size, val_size],
-        generator=torch.Generator().manual_seed(seed)
+    # Get indices for stratified split
+    indices = list(range(len(dataset)))
+    train_indices, val_indices = train_test_split(
+        indices,
+        test_size=0.2,
+        stratify=stratify_labels,
+        random_state=seed,
+        shuffle=True
     )
     
-    print(f"Split (80/20, matching Stage 1):")
-    print(f"  Train: {train_size} samples")
-    print(f"  Val:   {val_size} samples (used as test)")
+    # Create subset datasets
+    train_dataset = torch.utils.data.Subset(dataset, train_indices)
+    val_dataset = torch.utils.data.Subset(dataset, val_indices)
+    
+    # Print distribution statistics
+    print(f"\nStratified Split (80/20):")
+    print(f"  Train: {len(train_dataset)} samples")
+    print(f"  Val:   {len(val_dataset)} samples (used as test)")
+    
+    # Verify balanced distribution
+    print("\n  Verifying balanced distribution...")
+    
+    # Count by corruption type
+    train_corr_counts = {'clean': 0, 'depth_occluded': 0, 'low_light': 0}
+    val_corr_counts = {'clean': 0, 'depth_occluded': 0, 'low_light': 0}
+    train_class_counts = {'standing': 0, 'left_hand': 0, 'right_hand': 0, 'both_hands': 0}
+    val_class_counts = {'standing': 0, 'left_hand': 0, 'right_hand': 0, 'both_hands': 0}
+    
+    for idx in train_indices:
+        sample = dataset.samples[idx]
+        train_corr_counts[sample['corruption_type']] += 1
+        train_class_counts[sample['class_name']] += 1
+    
+    for idx in val_indices:
+        sample = dataset.samples[idx]
+        val_corr_counts[sample['corruption_type']] += 1
+        val_class_counts[sample['class_name']] += 1
+    
+    print("\n  Train set distribution:")
+    print(f"    Corruption: clean={train_corr_counts['clean']}, "
+          f"depth_occluded={train_corr_counts['depth_occluded']}, "
+          f"low_light={train_corr_counts['low_light']}")
+    print(f"    Classes: standing={train_class_counts['standing']}, "
+          f"left_hand={train_class_counts['left_hand']}, "
+          f"right_hand={train_class_counts['right_hand']}, "
+          f"both_hands={train_class_counts['both_hands']}")
+    
+    print("\n  Val set distribution:")
+    print(f"    Corruption: clean={val_corr_counts['clean']}, "
+          f"depth_occluded={val_corr_counts['depth_occluded']}, "
+          f"low_light={val_corr_counts['low_light']}")
+    print(f"    Classes: standing={val_class_counts['standing']}, "
+          f"left_hand={val_class_counts['left_hand']}, "
+          f"right_hand={val_class_counts['right_hand']}, "
+          f"both_hands={val_class_counts['both_hands']}")
     
     # Create dataloaders
     train_loader = DataLoader(
@@ -394,6 +443,150 @@ def validate(model, dataloader, criterion, device, temperature=1.0, alpha=1.0, b
     
     return avg_loss, avg_cls_loss, avg_alloc_loss, accuracy, avg_allocations
 
+def validate_naive(model, dataloader, criterion, device, rgb_layers, depth_layers):
+    """
+    Validate with NAIVE (fixed) layer allocation
+    
+    Args:
+        model: Stage 1 GestureClassifier model
+        dataloader: Validation dataloader
+        criterion: Loss function
+        device: Device to use
+        rgb_layers: Number of RGB layers to use (0-12)
+        depth_layers: Number of Depth layers to use (0-12)
+    
+    Returns:
+        avg_loss, accuracy, per_corruption_accuracy, avg_allocations
+    """
+    model.eval()
+    
+    total_loss = 0
+    correct = 0
+    total = 0
+    
+    # Track per-corruption accuracy
+    corruption_correct = {'clean': 0, 'depth_occluded': 0, 'low_light': 0}
+    corruption_total = {'clean': 0, 'depth_occluded': 0, 'low_light': 0}
+    
+    # Create fixed layer masks
+    # Strategy: Use LAST N layers (most important for fine-tuned model)
+    # Layer 0 is always included when any layers are used (following GTDM convention)
+    # Example: 6 layers = [1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1] (layer 0 + last 5)
+    #          12 layers = all 1s
+    #          0 layers = all 0s (no processing)
+    
+    def create_layer_mask(num_layers):
+        mask = torch.zeros(12)
+        if num_layers <= 0:
+            return mask
+        elif num_layers >= 12:
+            mask[:] = 1.0
+        else:
+            # Always include layer 0
+            mask[0] = 1.0
+            # Include last (num_layers - 1) layers
+            remaining = num_layers - 1
+            if remaining > 0:
+                mask[12-remaining:] = 1.0
+        return mask
+    
+    rgb_mask = create_layer_mask(rgb_layers)
+    depth_mask = create_layer_mask(depth_layers)
+    
+    rgb_mask = rgb_mask.to(device)
+    depth_mask = depth_mask.to(device)
+    
+    print(f"  Naive allocation - RGB mask: {rgb_mask.int().tolist()}")
+    print(f"  Naive allocation - Depth mask: {depth_mask.int().tolist()}")
+    
+    with torch.no_grad():
+        for data, labels, corruption in tqdm(dataloader, desc="Evaluating (Naive)"):
+            rgb = data['rgb'].to(device)
+            depth = data['depth'].to(device)
+            labels = labels.to(device)
+            
+            batch_size = rgb.size(0)
+            
+            # Forward pass using forward_controller with fixed masks
+            # IMPORTANT: When layers=0, return zero vector instead of calling forward_controller
+            # because forward_controller still processes patch_embed + positional encoding
+            # even when all transformer blocks are masked out
+            
+            if rgb_layers == 0:
+                # Return zero vector when RGB is disabled
+                rgb_features = torch.zeros(batch_size, 768).to(device)
+                # depth_features += 0.5 * torch.rand_like(depth_features)
+                # depth_features = torch.zeros(batch_size, 768).to(device)
+            else:
+                # Expand mask for batch
+                rgb_mask_batch = rgb_mask.unsqueeze(0).expand(batch_size, -1)
+                rgb_features = model.vision.forward_controller(rgb, rgb_mask_batch)
+                rgb_features = torch.squeeze(rgb_features)
+                if len(rgb_features.shape) == 1:
+                    rgb_features = torch.unsqueeze(rgb_features, dim=0)
+            
+            if depth_layers == 0:
+                # Return zero vector when Depth is disabled
+                depth_features = torch.zeros(batch_size, 768).to(device)
+            else:
+                # Expand mask for batch
+                depth_mask_batch = depth_mask.unsqueeze(0).expand(batch_size, -1)
+                depth_features = model.depth.forward_controller(depth, depth_mask_batch)
+                depth_features = torch.squeeze(depth_features)
+                if len(depth_features.shape) == 1:
+                    depth_features = torch.unsqueeze(depth_features, dim=0)
+            
+            # Fusion (same as model forward)
+            from models.vit_dev import positionalencoding1d
+            outlist = [model.vision_adapter(rgb_features), model.depth_adapter(depth_features)]
+            agg_features = torch.stack(outlist, dim=1)
+            b, n, d = agg_features.shape
+            agg_features = agg_features + positionalencoding1d(d, n)
+            fused = model.encoder(agg_features)
+            fused = torch.mean(fused, dim=1)
+            logits = model.classifier(fused)
+            
+            loss = criterion(logits, labels)
+            
+            _, predicted = torch.max(logits, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+            total_loss += loss.item()
+            
+            # Track per-corruption accuracy
+            for i in range(labels.size(0)):
+                if corruption[i, 0] == 1.0:
+                    corr_type = 'low_light'
+                elif corruption[i, 1] == 1.0:
+                    corr_type = 'depth_occluded'
+                else:
+                    corr_type = 'clean'
+                
+                corruption_total[corr_type] += 1
+                if predicted[i] == labels[i]:
+                    corruption_correct[corr_type] += 1
+    
+    avg_loss = total_loss / len(dataloader)
+    accuracy = 100 * correct / total
+    
+    # Per-corruption accuracy
+    corruption_acc = {}
+    for corr_type in ['clean', 'depth_occluded', 'low_light']:
+        if corruption_total[corr_type] > 0:
+            corruption_acc[corr_type] = 100 * corruption_correct[corr_type] / corruption_total[corr_type]
+        else:
+            corruption_acc[corr_type] = 0.0
+    
+    # Fixed allocations
+    avg_allocations = {
+        'clean': {'rgb': float(rgb_layers), 'depth': float(depth_layers)},
+        'depth_occluded': {'rgb': float(rgb_layers), 'depth': float(depth_layers)},
+        'low_light': {'rgb': float(rgb_layers), 'depth': float(depth_layers)}
+    }
+    
+    return avg_loss, accuracy, corruption_acc, avg_allocations
+
+
 def main(args):
     set_seed(args.seed)
     
@@ -414,6 +607,77 @@ def main(args):
     print(f"Train samples: {len(train_loader.dataset)}")
     print(f"Val samples: {len(val_loader.dataset)}")
     print(f"Test samples: {len(test_loader.dataset)}")
+    
+    # ========================================
+    # NAIVE ALLOCATION MODE (Evaluation Only)
+    # ========================================
+    if args.naive_allocation:
+        print("\n" + "="*60)
+        print("NAIVE ALLOCATION MODE (Fixed Layer Allocation)")
+        print("="*60)
+        
+        # Parse naive allocation (e.g., "12,0" or "6,6")
+        rgb_layers, depth_layers = map(int, args.naive_allocation.split(','))
+        print(f"  RGB layers: {rgb_layers}")
+        print(f"  Depth layers: {depth_layers}")
+        print(f"  Total layers: {rgb_layers + depth_layers}")
+        
+        # Load Stage 1 model for naive evaluation
+        from models.gesture_classifier import GestureClassifier
+        model = GestureClassifier(
+            num_classes=4,
+            adapter_hidden_dim=256,
+            vision_vit_layers=12,
+            depth_vit_layers=12,
+            pretrained_path=None,
+            layerdrop=0.0
+        ).to(device)
+        
+        # Load Stage 1 weights
+        checkpoint = torch.load(args.stage1_checkpoint, map_location=device, weights_only=False)
+        model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        print(f"Loaded Stage 1 weights from {args.stage1_checkpoint}")
+        
+        criterion = nn.CrossEntropyLoss()
+        
+        # Evaluate with naive allocation
+        test_loss, test_acc, corruption_acc, allocations = validate_naive(
+            model, test_loader, criterion, device, rgb_layers, depth_layers
+        )
+        
+        print(f"\n{'='*60}")
+        print(f"NAIVE ALLOCATION RESULTS: RGB={rgb_layers}, Depth={depth_layers}")
+        print(f"{'='*60}")
+        print(f"  Test Accuracy: {test_acc:.2f}%")
+        print(f"  Test Loss: {test_loss:.4f}")
+        print(f"\n  Per-corruption Accuracy:")
+        for corr_type, acc in corruption_acc.items():
+            print(f"    {corr_type:15s}: {acc:.2f}%")
+        print(f"{'='*60}")
+        
+        # Save results
+        import json
+        results = {
+            'mode': 'naive_allocation',
+            'rgb_layers': rgb_layers,
+            'depth_layers': depth_layers,
+            'total_layers': rgb_layers + depth_layers,
+            'test_accuracy': test_acc,
+            'test_loss': test_loss,
+            'per_corruption_accuracy': corruption_acc,
+            'allocations': allocations
+        }
+        
+        results_path = os.path.join(args.output_dir, f'naive_rgb{rgb_layers}_depth{depth_layers}.json')
+        with open(results_path, 'w') as f:
+            json.dump(results, f, indent=2)
+        print(f"\n✅ Results saved to {results_path}")
+        
+        return
+    
+    # ========================================
+    # NORMAL MODE: Train Adaptive Controller
+    # ========================================
     
     # Create model
     print("\nCreating adaptive model...")
@@ -524,6 +788,28 @@ def main(args):
     print(f"Test accuracy: {test_acc:.2f}%")
     print(f"Models saved to {args.output_dir}")
     
+    # Save results as JSON
+    import json
+    results = {
+        'mode': 'dynamic_allocation',
+        'total_layers': args.total_layers,
+        'best_val_accuracy': best_val_acc,
+        'test_accuracy': test_acc,
+        'test_loss': test_loss,
+        'allocations': test_allocations,
+        'hyperparameters': {
+            'alpha': args.alpha,
+            'beta': args.beta,
+            'lr': args.lr,
+            'epochs': args.epochs
+        }
+    }
+    
+    results_path = os.path.join(args.output_dir, f'stage2_dynamic_{args.total_layers}layers.json')
+    with open(results_path, 'w') as f:
+        json.dump(results, f, indent=2)
+    print(f"Results saved to {results_path}")
+    
     writer.close()
 
 
@@ -554,6 +840,11 @@ if __name__ == "__main__":
                         help='Random seed for reproducibility')
     parser.add_argument('--output_dir', type=str, default='checkpoints/stage2',
                         help='Output directory for checkpoints')
+    
+    # Naive allocation mode
+    parser.add_argument('--naive_allocation', type=str, default=None,
+                        help='Naive (fixed) layer allocation as "RGB,DEPTH" (e.g., "12,0", "6,6", "0,12"). '
+                             'When set, skips training and only evaluates with fixed allocation.')
     
     args = parser.parse_args()
     main(args)

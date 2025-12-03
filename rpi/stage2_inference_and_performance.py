@@ -7,12 +7,29 @@ import numpy as np
 import pyrealsense2 as rs
 import cv2
 from time import time
+from gpiozero import LED
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.adaptive_controller import AdaptiveGestureClassifier
 from data.gesture_dataset import transform_from_camera
 
 class_names = ['standing', 'left_hand', 'right_hand', 'both_hands']
+
+# Initialize GPIO LED Configuration ---
+try:
+    led_1 = LED(27)   # red LED GPIO 27
+    led_2 = LED(22)   # green LED GPIO 22
+    led_3 = LED(17)   # blue LED GPIO 17
+    led_4 = LED(5)    # yellow LED GPIO 5
+    led_5 = LED(6)
+    print("[System] GPIO LEDs initialized.")
+except Exception as e:
+    print(f"[System] GPIO Init Failed: {e} (Ignore if not on RPi)")
+    led_1 = None
+    led_2 = None
+    led_3 = None
+    led_4 = None
+    led_5 = None
 
 # --- Layer Usage Plotter Class ---
 class LayerPlotter:
@@ -82,6 +99,40 @@ def conceptual_calculate_flops(total_layers, rgb_layers_used, depth_layers_used)
 
     return total_flops / 1e9
 
+# Update LED state by new predicted gesture ---
+def update_led(label):
+    if led_1 is None or led_2 is None or led_3 is None or led_4 is None:
+            return
+    if label != 'standing':
+        led_1.off()
+    if label != 'left_hand':
+        led_2.off()
+    if label != 'right_hand':
+        led_3.off()
+    if label != 'both_hands':
+        led_4.off()
+
+    if label == 'standing':
+        if not led_1.is_lit:
+            led_1.blink(on_time=0.5, off_time=0, n=1, background=True)
+    elif label == 'left_hand':
+        if not led_2.is_lit:
+            led_2.blink(on_time=0.5, off_time=0, n=1, background=True)
+    elif label == 'right_hand':
+        if not led_3.is_lit:
+            led_3.blink(on_time=0.5, off_time=0, n=1, background=True)
+    elif label == 'both_hands':
+        if not led_4.is_lit:
+            led_4.blink(on_time=0.5, off_time=0, n=1, background=True)
+
+# Reset GPIO
+def reset_gpio():
+    if led_1: led_1.off()
+    if led_2: led_2.off()
+    if led_3: led_3.off()
+    if led_4: led_4.off()
+    if led_5: led_5.off()
+
 # --- Inference Function ---
 def inference_stage2(model, data, device, temperature=0.5):
 
@@ -136,18 +187,22 @@ def take_pic(camera_event, model=None, device=None, args=None):
         while True:
             if not camera_event.is_set():
                 if is_pipeline_active:
-                    print(">>> [Worker] Stopping Camera (Sleep Mode)...")
+                    print(">>> [Camera] Stopping Camera (Sleep Mode)...")
                     pipeline.stop()
+                    led_5.off()
                     is_pipeline_active = False
                     cv2.destroyAllWindows()
-                    # TODO: Reset GPIO
+                    reset_gpio()
                 camera_event.wait()
                 continue
             elif is_pipeline_active == False:
-                print(">>> [Worker] Starting Camera...")
-                pipeline.start(config)
+                print(">>> [Camera] Starting Camera...")
+                profile = pipeline.start(config)
+                device = profile.get_device()
+                color_sensor = device.first_color_sensor() 
+                led_5.on()
                 is_pipeline_active = True
-                last_capture_time = time() - 5.0  # Force immediate capture on start
+                last_capture_time = time() - 1.0  # Force immediate capture on start
 
             frames = pipeline.wait_for_frames()
             depth_frame = frames.get_depth_frame()
@@ -166,15 +221,32 @@ def take_pic(camera_event, model=None, device=None, args=None):
 
             key = cv2.waitKey(1) & 0xFF
 
-            
-            if time() - last_capture_time >= 5.0:
-            # if key == ord('q'):
+            if key == ord('l'):
+                # 1. Disable Auto Exposure
+                color_sensor.set_option(rs.option.enable_auto_exposure, 0)
+                
+                # 2. Set very low exposure time (unit is usually microseconds)
+                # Value 50.0 is very dark. Adjust this value (e.g., 10.0 to 100.0) if needed.
+                color_sensor.set_option(rs.option.exposure, 50.0) 
+                
+                # 3. Set Gain to minimum to reduce noise/brightness
+                min_gain = color_sensor.get_option_range(rs.option.gain).min
+                color_sensor.set_option(rs.option.gain, min_gain)
+                
+                continue
+            if key == ord('n'):
+                color_sensor.set_option(rs.option.enable_auto_exposure, 1)
+                continue
 
+            if time() - last_capture_time >= 2.0:
+            # if key == ord('q'):
+                print("=========================================================")
                 print("==> Captured one RGB+Depth, sending to model...")
                 last_capture_time = time()
 
                 data = transform_from_camera(color_image, depth_colormap)
                 pred_label, rgb_layers, depth_layers, latency_ms= inference_stage2(model, data, device)
+                update_led(pred_label)
                 plotter.update(rgb_layers, depth_layers)
                 flops = conceptual_calculate_flops(
                     total_layers=args.total_layers,
@@ -194,7 +266,7 @@ def take_pic(camera_event, model=None, device=None, args=None):
                 cv2.addWeighted(overlay, 0.6, final_display, 0.4, 0, final_display)
                 cv2.putText(final_display, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
                 cv2.imshow('ADMN Real-time Demo', final_display)
-                cv2.waitKey(10)
+                cv2.waitKey(1000)
         
             # elif key == 27:  # ESC
             #     pipeline.stop()
@@ -204,7 +276,7 @@ def take_pic(camera_event, model=None, device=None, args=None):
         if is_pipeline_active:
             pipeline.stop()
         cv2.destroyAllWindows()
-        # TODO: Reset GPIO
+        reset_gpio()
 
 def camera(camera_event,camera_ready,args):
     # --- Setup and Model Loading ---
@@ -232,21 +304,20 @@ def camera(camera_event,camera_ready,args):
     camera_ready.set()
     take_pic(camera_event, model, device, args)
 
+# if __name__ == "__main__":
+#     parser = argparse.ArgumentParser(description='Stage 2 Adaptive Controller Inference')
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Stage 2 Adaptive Controller Inference')
+#     # Data
+#     parser.add_argument('--data_dir', type=str, default='../data/clean',
+#                         help='Path to the directory containing test data.')
 
-    # Data
-    parser.add_argument('--data_dir', type=str, default='../data/clean',
-                        help='Path to the directory containing test data.')
+#     # Model/Checkpoint
+#     parser.add_argument('--checkpoint', type=str, 
+#                         default='best_controller_12layers.pth',
+#                         help='Path to the trained Stage 2 controller checkpoint.')
+#     parser.add_argument('--total_layers', type=int, default=12,
+#                         help='Total layer budget used during Stage 2 training.')
 
-    # Model/Checkpoint
-    parser.add_argument('--checkpoint', type=str, 
-                        default='best_controller_12layers.pth',
-                        help='Path to the trained Stage 2 controller checkpoint.')
-    parser.add_argument('--total_layers', type=int, default=12,
-                        help='Total layer budget used during Stage 2 training.')
+#     args = parser.parse_args()
 
-    args = parser.parse_args()
-
-    camera(args)
+#     camera(args)

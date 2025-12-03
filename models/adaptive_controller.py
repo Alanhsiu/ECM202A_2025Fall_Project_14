@@ -164,6 +164,14 @@ class LayerAllocationModule(nn.Module):
                 layer = full_idx % 12
                 allocation_full[batch_idx, modality, layer] = allocation_binary[batch_idx, sel_idx]
         
+        # Verify total layer constraint is satisfied
+        total_allocated = allocation_full.sum(dim=(1, 2))  # [batch]
+        expected_total = self.total_layers
+        if not (total_allocated == expected_total).all():
+            # This should never happen, but log if it does
+            import warnings
+            warnings.warn(f"Layer allocation constraint violated! Expected {expected_total}, got {total_allocated.tolist()}")
+        
         return allocation_full
 
 class AdaptiveGestureClassifier(nn.Module):

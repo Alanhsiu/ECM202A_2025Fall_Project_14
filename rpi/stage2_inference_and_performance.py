@@ -101,7 +101,7 @@ def conceptual_calculate_flops(total_layers, rgb_layers_used, depth_layers_used)
 
 # Update LED state by new predicted gesture ---
 def update_led(label):
-    if led_1 is None or led_2 is None or led_3 is None or led_4 is None:
+    if led_1 is None or led_2 is None or led_3 is None or led_4 is None or led_5 is None:
             return
     if label != 'standing':
         led_1.off()
@@ -111,7 +111,7 @@ def update_led(label):
         led_3.off()
     if label != 'both_hands':
         led_4.off()
-
+        
     if label == 'standing':
         if not led_1.is_lit:
             led_1.blink(on_time=0.5, off_time=0, n=1, background=True)
@@ -198,8 +198,8 @@ def take_pic(camera_event, model=None, device=None, args=None):
             elif is_pipeline_active == False:
                 print(">>> [Camera] Starting Camera...")
                 profile = pipeline.start(config)
-                device = profile.get_device()
-                color_sensor = device.first_color_sensor() 
+                dd = profile.get_device()
+                color_sensor = dd.first_color_sensor() 
                 led_5.on()
                 is_pipeline_active = True
                 last_capture_time = time() - 1.0  # Force immediate capture on start
@@ -238,7 +238,7 @@ def take_pic(camera_event, model=None, device=None, args=None):
                 color_sensor.set_option(rs.option.enable_auto_exposure, 1)
                 continue
 
-            if time() - last_capture_time >= 2.0:
+            if time() - last_capture_time >= 5.0:
             # if key == ord('q'):
                 print("=========================================================")
                 print("==> Captured one RGB+Depth, sending to model...")

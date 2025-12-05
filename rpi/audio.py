@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 camera_event = threading.Event()
 camera_ready = threading.Event()
 # --- Audio Settings ---
-AUDIO_THRESHOLD = 800
+AUDIO_THRESHOLD = 3500
 TOGGLE_COOLDOWN = 5.0
 CHUNK = 1024
 FORMAT = pyaudio.paInt16

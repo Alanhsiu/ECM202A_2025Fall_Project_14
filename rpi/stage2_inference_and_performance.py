@@ -163,11 +163,10 @@ def inference_stage2(model, data, device, temperature=0.5):
         depth_layers = layer_allocation[0, 1, :].sum().item()
 
     latency_ms = (end_time - start_time)*1000
-    print("===> Used Layers - RGB:", int(rgb_layers), "Depth:", int(depth_layers))
-    print("===> Result:", [class_names[i] for i in predicted.cpu().numpy()])
+    
     return pred_label, rgb_layers, depth_layers, latency_ms
 
-def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_state, model=None, device=None, args=None):
+def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_state, log_queue, model=None, device=None, args=None):
     # Configure depth and color streams
     pipeline = rs.pipeline()
     config = rs.config()
@@ -190,6 +189,7 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
                 break
             if not camera_event.is_set():
                 if is_pipeline_active:
+                    log_queue.put(">>> [Camera] Stopping Camera (Sleep Mode)...")
                     print(">>> [Camera] Stopping Camera (Sleep Mode)...")
                     pipeline.stop()
                     # led_5.off()
@@ -199,6 +199,7 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
                 camera_event.wait()
                 continue
             elif is_pipeline_active == False:
+                log_queue.put(">>> [Camera] Starting Camera...")
                 print(">>> [Camera] Starting Camera...")
                 profile = pipeline.start(config)
                 dd = profile.get_device()
@@ -247,7 +248,9 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
                 continue
 
             if time() - last_capture_time >= 5.0:
+                log_queue.put("=========================================================")
                 print("=========================================================")
+                log_queue.put("==> Captured one RGB+Depth, sending to model...")
                 print("==> Captured one RGB+Depth, sending to model...")
                 last_capture_time = time()
 
@@ -260,6 +263,12 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
                     rgb_layers_used=rgb_layers,
                     depth_layers_used=depth_layers
                 )
+                log_queue.put(f"===> Prediction: {pred_label}")
+                log_queue.put(f"===> Used Layers - RGB: {int(rgb_layers)} Depth: {int(depth_layers)}")
+                log_queue.put(f"===> Estimated FLOPs: {flops:.2f} GFLOPs")
+                log_queue.put(f"===> Latency: {latency_ms:.1f} ms")
+                print("===> Used Layers - RGB:", int(rgb_layers), "Depth:", int(depth_layers))
+                print("===> Result:", pred_label)
                 print(f"===> Estimated FLOPs: {flops:.2f} GFLOPs")
                 print("===> Latency:", latency_ms, "ms")
                 with shared_lock:
@@ -286,7 +295,7 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
         # cv2.destroyAllWindows()
         # reset_gpio()
 
-def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, args):
+def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args):
     # --- Setup and Model Loading ---
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -310,7 +319,7 @@ def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock,
     print(f"Starting inference with Total Layers Budget: {args.total_layers}")
     model.eval()
     camera_ready.set()
-    take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_state, model, device, args)
+    take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_state, log_queue, model, device, args)
 
 # if __name__ == "__main__":
 #     parser = argparse.ArgumentParser(description='Stage 2 Adaptive Controller Inference')

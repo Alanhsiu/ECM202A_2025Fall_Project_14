@@ -116,6 +116,7 @@ def audio_listener():
         frames_per_buffer=CHUNK
     )
     camera_ready.wait()
+    log_queue.put('Camera is ready')
     print('Camera is ready')
     audio_start_time = time.time()-TOGGLE_COOLDOWN
     try:
@@ -125,13 +126,16 @@ def audio_listener():
             current_rms = get_audio_rms(stream)
             if(current_rms > AUDIO_THRESHOLD):
                 if(time.time() - audio_start_time < TOGGLE_COOLDOWN): #  Avoid rapid toggling
+                    log_queue.put("NOT YET")
                     print("NOT YET")
                     continue
                 elif not camera_event.is_set():
+                    log_queue.put("Audio trigger detected: START camera")
                     print("Audio trigger detected: START camera")
                     camera_event.set()
                     audio_start_time = time.time()
                 else:
+                    log_queue.put("Audio trigger detected: STOP camera")    
                     print("Audio trigger detected: STOP camera")
                     camera_event.clear()
                     audio_start_time = time.time()
@@ -142,7 +146,7 @@ def audio_listener():
 
 # ---- Main ----
 def main(args):
-    t_camera = threading.Thread(target=camera, args=(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, args), daemon=True)
+    t_camera = threading.Thread(target=camera, args=(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args), daemon=True)
     t_audio = threading.Thread(target=audio_listener, daemon=True)
     t_ui = threading.Thread(target=ui_generate, args=(camera_event, stop_event, low_light_event, shared_state, shared_lock, log_queue), daemon=True)
     

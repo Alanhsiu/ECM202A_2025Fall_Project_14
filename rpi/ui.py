@@ -192,7 +192,7 @@ class camera_ui:
 def ui_generate(camera_event, stop_event, low_light_event, shared_state, shared_lock, log_queue, total_layers = 12):
     cpu_plotter = CpuPlotter(max_history=60, height=200, width=640)
     layer_plotter = LayerPlotter(max_history=30, height=200, width=640, total_layers=total_layers)
-    console = ConsolePanel(width=1280, height=120, max_lines=6)
+    console = ConsolePanel(width=1280, height=200, max_lines=6)
     placeholder_camera = camera_ui()
     
     cpu_time = time.time()
@@ -223,6 +223,9 @@ def ui_generate(camera_event, stop_event, low_light_event, shared_state, shared_
                 layer_depth = shared_state["layer_depth"]
                 frame = shared_state["frame"]
                 last_result = shared_state["last_result"] 
+                if layer_rgb is not None and layer_depth is not None:
+                    shared_state["layer_rgb"] = None
+                    shared_state["layer_depth"] = None
 
             # Update camera frame
             if frame is None and last_camera_frame is None:
@@ -259,6 +262,7 @@ def ui_generate(camera_event, stop_event, low_light_event, shared_state, shared_
         display_small = cv2.resize(final_display, None, fx=scale, fy=scale)
         cv2.imshow("ADMN Dashboard", display_small)
         key = cv2.waitKey(30) & 0xFF
+
         if key == 27:  # ESC
             stop_event.set()
             camera_event.set()

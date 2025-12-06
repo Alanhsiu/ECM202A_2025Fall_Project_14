@@ -40,61 +40,6 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 
-class cpu_usage(object):
-    def __init__(self):
-        self.max_points = 60  # last 60 seconds info
-        self.update_interval = 1000  
-
-        # deque: auto pop old data when maxlen is reached
-        self.cpu_data = deque([psutil.cpu_percent(interval=None)] * self.max_points, maxlen=self.max_points)
-
-        self.fig, self.ax = plt.subplots()
-        self.fig.canvas.manager.set_window_title('CPU Usage Monitor')
-
-        # X axis: 0 to max_points-1
-        self.x_axis = list(range(self.max_points))
-        self.ax.set_xlim(0, self.max_points - 1) 
-        self.ax.set_xticklabels([])
-        self.ax.set_xlabel('Past 1 Minute -> Now')
-
-        # Y axis: 0% to 100%
-        self.ax.set_ylim(0, 100)
-        self.ax.set_ylabel('CPU Usage (%)')
-
-        # Initialize the line/area fill and text label
-        self.line, = self.ax.plot(self.x_axis, self.cpu_data, color='tab:blue', linewidth=2)
-        self.fill = self.ax.fill_between(self.x_axis, self.cpu_data, color='tab:blue', alpha=0.3)
-        self.text_label = self.ax.text(0.02, 0.95, '', transform=self.ax.transAxes, fontsize=12, fontweight='bold', color='tab:blue')
-
-    def update(self, frame):
-        cpu_percent = psutil.cpu_percent(interval=None) # non-blocking, get instant value
-
-        self.cpu_data.append(cpu_percent)
-        self.line.set_ydata(self.cpu_data)
-        
-        self.fill.remove() 
-        self.fill = self.ax.fill_between(self.x_axis, self.cpu_data, color='tab:blue', alpha=0.3)
-        
-        self.text_label.set_text(f"Current: {cpu_percent}%")
-        
-        return self.line, self.text_label
-    
-    def start(self):
-        try:
-            self.ani = animation.FuncAnimation(
-                self.fig, 
-                self.update,
-                interval=self.update_interval, 
-                cache_frame_data=False
-            )
-        
-            plt.tight_layout()
-            plt.grid(True, linestyle='--', alpha=0.5)
-            plt.show()
-        except KeyboardInterrupt:
-            plt.close('all')
-            sys.exit(0)
-
 # ---- Audio RMS Calculation ----
 def get_audio_rms(stream):
     try:
@@ -117,7 +62,6 @@ def audio_listener():
     )
     camera_ready.wait()
     log_queue.put('Camera is ready')
-    print('Camera is ready')
     audio_start_time = time.time()-TOGGLE_COOLDOWN
     try:
         while True:
@@ -127,16 +71,13 @@ def audio_listener():
             if(current_rms > AUDIO_THRESHOLD):
                 if(time.time() - audio_start_time < TOGGLE_COOLDOWN): #  Avoid rapid toggling
                     log_queue.put("NOT YET")
-                    print("NOT YET")
                     continue
                 elif not camera_event.is_set():
                     log_queue.put("Audio trigger detected: START camera")
-                    print("Audio trigger detected: START camera")
                     camera_event.set()
                     audio_start_time = time.time()
                 else:
                     log_queue.put("Audio trigger detected: STOP camera")    
-                    print("Audio trigger detected: STOP camera")
                     camera_event.clear()
                     audio_start_time = time.time()
     finally:

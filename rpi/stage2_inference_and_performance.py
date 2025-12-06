@@ -31,62 +31,6 @@ except Exception as e:
     led_4 = None
     led_5 = None
 
-# --- Layer Usage Plotter Class ---
-class LayerPlotter:
-    def __init__(self, max_history=50, height=200, width=640, total_layers=12):
-        self.max_history = max_history
-        self.height = height
-        self.width = width
-        self.total_layers = total_layers
-
-        self.rgb_history = [0] * max_history
-        self.depth_history = [0] * max_history
-        
-        self.bg_color = (20, 20, 20)
-        self.rgb_color = (0, 0, 255)
-        self.depth_color = (255, 200, 0)
-        self.grid_color = (50, 50, 50)
-
-    def update(self, rgb_val, depth_val):
-
-        self.rgb_history.pop(0)
-        self.rgb_history.append(rgb_val)
-        self.depth_history.pop(0)
-        self.depth_history.append(depth_val)
-
-    def draw(self):
-
-        canvas = np.full((self.height, self.width, 3), self.bg_color, dtype=np.uint8)
-
-        step_y = self.height // self.total_layers
-        for i in range(0, self.total_layers + 1, 2):
-            y = self.height - int((i / self.total_layers) * self.height)
-            cv2.line(canvas, (0, y), (self.width, y), self.grid_color, 1)
-
-        step_x = self.width / (self.max_history - 1)
-
-        def draw_poly(history, color):
-            points = []
-            for i, val in enumerate(history):
-                x = int(i * step_x)
-                y = self.height - int((val / self.total_layers) * (self.height - 20)) - 10
-                points.append((x, y))
-            
-            for i in range(len(points) - 1):
-                cv2.line(canvas, points[i], points[i+1], color, 2)
-                
-            last_pt = points[-1]
-            cv2.putText(canvas, str(int(history[-1])), (last_pt[0]-20, last_pt[1]-10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-
-        draw_poly(self.rgb_history, self.rgb_color)
-        draw_poly(self.depth_history, self.depth_color)
-
-        cv2.putText(canvas, "RGB Layers", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.rgb_color, 1)
-        cv2.putText(canvas, "Depth Layers", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.depth_color, 1)
-
-        return canvas
-
 # --- Conceptual FLOPs Calculation Function ---
 def conceptual_calculate_flops(total_layers, rgb_layers_used, depth_layers_used):
 
@@ -175,10 +119,6 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
     config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
-    # Start streaming
-    # pipeline.start(config)
-    # plotter = LayerPlotter(max_history=30, height=200, width=640, total_layers=args.total_layers)
-    
     is_pipeline_active = False
     low_light = False
     camera_event.wait() # wait for the first trigger to start camera
@@ -190,17 +130,16 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
             if not camera_event.is_set():
                 if is_pipeline_active:
                     log_queue.put(">>> [Camera] Stopping Camera (Sleep Mode)...")
-                    print(">>> [Camera] Stopping Camera (Sleep Mode)...")
+                    log_queue.put("=========================================================")
                     pipeline.stop()
                     # led_5.off()
                     is_pipeline_active = False
-                    # cv2.destroyAllWindows()
                     # reset_gpio()
                 camera_event.wait()
                 continue
             elif is_pipeline_active == False:
                 log_queue.put(">>> [Camera] Starting Camera...")
-                print(">>> [Camera] Starting Camera...")
+                log_queue.put("=========================================================")
                 profile = pipeline.start(config)
                 dd = profile.get_device()
                 color_sensor = dd.first_color_sensor() 
@@ -229,6 +168,8 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
             # key = cv2.waitKey(1) & 0xFF
 
             if  low_light == False and low_light_event.is_set(): # low light mode
+                log_queue.put(">>> [Camera] Low Light Mode Activated.")
+                log_queue.put("=========================================================")
                 low_light = True
                 # 1. Disable Auto Exposure
                 color_sensor.set_option(rs.option.enable_auto_exposure, 0)
@@ -243,15 +184,14 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
                 continue
 
             if low_light and low_light_event.is_set() == False:
-                color_sensor.set_option(rs.option.enable_auto_exposure, 1)
+                log_queue.put(">>> [Camera] Exiting Low Light Mode.")
                 low_light = False
+                color_sensor.set_option(rs.option.enable_auto_exposure, 1)
                 continue
 
             if time() - last_capture_time >= 5.0:
-                log_queue.put("=========================================================")
-                print("=========================================================")
+                
                 log_queue.put("==> Captured one RGB+Depth, sending to model...")
-                print("==> Captured one RGB+Depth, sending to model...")
                 last_capture_time = time()
 
                 data = transform_from_camera(color_image, depth_colormap)
@@ -267,10 +207,7 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
                 log_queue.put(f"===> Used Layers - RGB: {int(rgb_layers)} Depth: {int(depth_layers)}")
                 log_queue.put(f"===> Estimated FLOPs: {flops:.2f} GFLOPs")
                 log_queue.put(f"===> Latency: {latency_ms:.1f} ms")
-                print("===> Used Layers - RGB:", int(rgb_layers), "Depth:", int(depth_layers))
-                print("===> Result:", pred_label)
-                print(f"===> Estimated FLOPs: {flops:.2f} GFLOPs")
-                print("===> Latency:", latency_ms, "ms")
+                log_queue.put("=========================================================")
                 with shared_lock:
                     shared_state["frame"] = combined_camera.copy()
                     shared_state["layer_rgb"] = rgb_layers
@@ -303,7 +240,7 @@ def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock,
     if torch.cuda.is_available():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
 
-    print("\nCreating model...")
+    log_queue.put("\nCreating model...")
     model = AdaptiveGestureClassifier(
         num_classes=4,
         adapter_hidden_dim=256,
@@ -315,8 +252,7 @@ def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock,
     # Load the trained Stage 2 model weights
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint['model_state_dict'])
-
-    print(f"Starting inference with Total Layers Budget: {args.total_layers}")
+    log_queue.put(f"Starting inference with Total Layers Budget: {args.total_layers}")
     model.eval()
     camera_ready.set()
     take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_state, log_queue, model, device, args)

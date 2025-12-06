@@ -1,11 +1,13 @@
 import argparse
 import os
+import queue
 import sys
 import threading
 import numpy as np
 import cv2
 import pyaudio
 import time
+from ui import ui_generate
 from stage2_inference_and_performance import camera
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -16,6 +18,18 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # ---- Shared Events ----
 camera_event = threading.Event()
 camera_ready = threading.Event()
+stop_event    = threading.Event()   # 程式要結束
+
+shared_lock   = threading.Lock()
+shared_state  = {
+    "frame": None,      # camera thread write / UI thread read (np.ndarray, shape 480x1280x3)
+    "layer_rgb": None,
+    "layer_depth":None,
+    "last_result": None # dict: {"pred": ..., "rgb": ..., "depth": ..., "latency": ..., "cpu": ...}
+}
+
+log_queue = queue.Queue() 
+
 # --- Audio Settings ---
 AUDIO_THRESHOLD = 3500
 TOGGLE_COOLDOWN = 5.0
@@ -23,9 +37,6 @@ CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
-
-
-
 
 class cpu_usage(object):
     def __init__(self):
@@ -107,6 +118,8 @@ def audio_listener():
     audio_start_time = time.time()-TOGGLE_COOLDOWN
     try:
         while True:
+            if stop_event.is_set():
+                break
             current_rms = get_audio_rms(stream)
             if(current_rms > AUDIO_THRESHOLD):
                 if(time.time() - audio_start_time < TOGGLE_COOLDOWN): #  Avoid rapid toggling
@@ -127,18 +140,20 @@ def audio_listener():
 
 # ---- Main ----
 def main(args):
-    t_worker = threading.Thread(target=camera, args=(camera_event,camera_ready, args),daemon=True)
+    t_camera = threading.Thread(target=camera, args=(stop_event, camera_event,camera_ready, shared_lock, shared_state, args),daemon=True)
     t_audio = threading.Thread(target=audio_listener, daemon=True)
+    t_ui = threading.Thread(target=ui_generate, args=(camera_event, stop_event, shared_state, shared_lock, log_queue), daemon=True)
     
-    
-    t_worker.start()
+    t_camera.start()
     t_audio.start()
-    
-    cpu = cpu_usage()
-    cpu.start()
+    t_ui.start()
 
-    t_worker.join()
+    # cpu = cpu_usage()
+    # cpu.start()
+
+    t_camera.join()
     t_audio.join()
+    t_ui.join()
     
 
 if __name__ == "__main__":

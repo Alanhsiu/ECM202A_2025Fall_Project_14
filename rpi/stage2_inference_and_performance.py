@@ -14,6 +14,7 @@ from models.adaptive_controller import AdaptiveGestureClassifier
 from data.gesture_dataset import transform_from_camera
 
 class_names = ['standing', 'left_hand', 'right_hand', 'both_hands']
+PIC_INTERVAL = 5.0  
 
 # Initialize GPIO LED Configuration ---
 try:
@@ -132,9 +133,14 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
                     log_queue.put(">>> [Camera] Stopping Camera (Sleep Mode)...")
                     log_queue.put("=========================================================")
                     pipeline.stop()
-                    # led_5.off()
+                    led_5.off()
                     is_pipeline_active = False
-                    # reset_gpio()
+                    reset_gpio()
+                    with shared_lock:
+                        shared_state["frame"] = None
+                        shared_state["layer_rgb"] = None
+                        shared_state["layer_depth"] = None
+                        shared_state["last_result"] = None
                 camera_event.wait()
                 continue
             elif is_pipeline_active == False:
@@ -144,9 +150,9 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
                 dd = profile.get_device()
                 color_sensor = dd.first_color_sensor() 
                 
-                # led_5.on()
+                led_5.on()
                 is_pipeline_active = True
-                last_capture_time = time() - 1.0  # Force immediate capture on start
+                last_capture_time = time() - PIC_INTERVAL  # Force immediate capture on start
 
             frames = pipeline.wait_for_frames()
             depth_frame = frames.get_depth_frame()
@@ -156,48 +162,37 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
             color_image = np.asanyarray(color_frame.get_data())
 
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
-            # chart_img = plotter.draw()
 
             combined_camera = np.hstack((color_image, depth_colormap))
-            with shared_lock:
+            
+            with shared_lock: # real-time camera frame update
                 shared_state["frame"] = combined_camera.copy()
-            # chart_img_resized = cv2.resize(chart_img, (combined_camera.shape[1], 200))
-            # final_display = np.vstack((combined_camera, chart_img_resized))
-            # cv2.imshow('ADMN Real-time Demo', final_display)
-
-            # key = cv2.waitKey(1) & 0xFF
 
             if  low_light == False and low_light_event.is_set(): # low light mode
                 log_queue.put(">>> [Camera] Low Light Mode Activated.")
                 log_queue.put("=========================================================")
                 low_light = True
-                # 1. Disable Auto Exposure
-                color_sensor.set_option(rs.option.enable_auto_exposure, 0)
-                
-                # 2. Set very low exposure time (unit is usually microseconds)
-                color_sensor.set_option(rs.option.exposure, 10.0) 
-                
-                # 3. Set Gain to minimum to reduce noise/brightness
-                min_gain = color_sensor.get_option_range(rs.option.gain).min
+
+                color_sensor.set_option(rs.option.enable_auto_exposure, 0) # disable auto exposure                 
+                color_sensor.set_option(rs.option.exposure, 10.0) # set exposure 
+                min_gain = color_sensor.get_option_range(rs.option.gain).min # set gain to min
                 color_sensor.set_option(rs.option.gain, min_gain)
-                
                 continue
 
             if low_light and low_light_event.is_set() == False:
                 log_queue.put(">>> [Camera] Exiting Low Light Mode.")
                 low_light = False
-                color_sensor.set_option(rs.option.enable_auto_exposure, 1)
+                color_sensor.set_option(rs.option.enable_auto_exposure, 1) # enable auto exposure
                 continue
 
-            if time() - last_capture_time >= 5.0:
+            if time() - last_capture_time >= PIC_INTERVAL:
                 
                 log_queue.put("==> Captured one RGB+Depth, sending to model...")
                 last_capture_time = time()
 
                 data = transform_from_camera(color_image, depth_colormap)
                 pred_label, rgb_layers, depth_layers, latency_ms= inference_stage2(model, data, device)
-                # update_led(pred_label)
-                # plotter.update(rgb_layers, depth_layers)
+                update_led(pred_label)
                 flops = conceptual_calculate_flops(
                     total_layers=args.total_layers,
                     rgb_layers_used=rgb_layers,
@@ -213,24 +208,11 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
                     shared_state["layer_rgb"] = rgb_layers
                     shared_state["layer_depth"] = depth_layers
                     shared_state["last_result"] = f"Pred: {pred_label} | RGB: {int(rgb_layers)} | Depth: {int(depth_layers)} | {latency_ms:.1f} ms"
-                # updated_chart = plotter.draw()
-                # updated_chart_resized = cv2.resize(updated_chart, (combined_camera.shape[1], 200))
-
-                #final_display[480:, :] = updated_chart_resized
-                # text = f"Pred: {pred_label} | RGB: {int(rgb_layers)} | Depth: {int(depth_layers)} | {latency_ms:.1f} ms"
-                # overlay = final_display.copy()
-                # cv2.rectangle(overlay, (0, 0), (1280, 60), (0, 0, 0), -1)
-                # cv2.addWeighted(overlay, 0.6, final_display, 0.4, 0, final_display)
-                # cv2.putText(final_display, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
-                # cv2.imshow('ADMN Real-time Demo', final_display)
-                # cv2.waitKey(1000)
         
     finally:
         if is_pipeline_active:
             pipeline.stop()
-            
-        # cv2.destroyAllWindows()
-        # reset_gpio()
+        reset_gpio()
 
 def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args):
     # --- Setup and Model Loading ---
@@ -240,7 +222,7 @@ def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock,
     if torch.cuda.is_available():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
 
-    log_queue.put("\nCreating model...")
+    log_queue.put("Creating model...")
     model = AdaptiveGestureClassifier(
         num_classes=4,
         adapter_hidden_dim=256,

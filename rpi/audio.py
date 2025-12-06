@@ -16,9 +16,11 @@ from collections import deque
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ---- Shared Events ----
+low_light_event = threading.Event()
 camera_event = threading.Event()
 camera_ready = threading.Event()
-stop_event    = threading.Event()   # 程式要結束
+stop_event    = threading.Event()   
+
 
 shared_lock   = threading.Lock()
 shared_state  = {
@@ -140,9 +142,9 @@ def audio_listener():
 
 # ---- Main ----
 def main(args):
-    t_camera = threading.Thread(target=camera, args=(stop_event, camera_event,camera_ready, shared_lock, shared_state, args),daemon=True)
+    t_camera = threading.Thread(target=camera, args=(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, args), daemon=True)
     t_audio = threading.Thread(target=audio_listener, daemon=True)
-    t_ui = threading.Thread(target=ui_generate, args=(camera_event, stop_event, shared_state, shared_lock, log_queue), daemon=True)
+    t_ui = threading.Thread(target=ui_generate, args=(camera_event, stop_event, low_light_event, shared_state, shared_lock, log_queue), daemon=True)
     
     t_camera.start()
     t_audio.start()

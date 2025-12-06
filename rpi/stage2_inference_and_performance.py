@@ -167,7 +167,7 @@ def inference_stage2(model, data, device, temperature=0.5):
     print("===> Result:", [class_names[i] for i in predicted.cpu().numpy()])
     return pred_label, rgb_layers, depth_layers, latency_ms
 
-def take_pic(stop_event, camera_event, shared_lock, shared_state, model=None, device=None, args=None):
+def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_state, model=None, device=None, args=None):
     # Configure depth and color streams
     pipeline = rs.pipeline()
     config = rs.config()
@@ -181,6 +181,7 @@ def take_pic(stop_event, camera_event, shared_lock, shared_state, model=None, de
     # plotter = LayerPlotter(max_history=30, height=200, width=640, total_layers=args.total_layers)
     
     is_pipeline_active = False
+    low_light = False
     camera_event.wait() # wait for the first trigger to start camera
     
     try:
@@ -224,9 +225,10 @@ def take_pic(stop_event, camera_event, shared_lock, shared_state, model=None, de
             # final_display = np.vstack((combined_camera, chart_img_resized))
             # cv2.imshow('ADMN Real-time Demo', final_display)
 
-            key = cv2.waitKey(1) & 0xFF
+            # key = cv2.waitKey(1) & 0xFF
 
-            if key == ord('l'): # low light mode
+            if  low_light == False and low_light_event.is_set(): # low light mode
+                low_light = True
                 # 1. Disable Auto Exposure
                 color_sensor.set_option(rs.option.enable_auto_exposure, 0)
                 
@@ -239,8 +241,9 @@ def take_pic(stop_event, camera_event, shared_lock, shared_state, model=None, de
                 
                 continue
 
-            if key == ord('n'):
+            if low_light and low_light_event.is_set() == False:
                 color_sensor.set_option(rs.option.enable_auto_exposure, 1)
+                low_light = False
                 continue
 
             if time() - last_capture_time >= 5.0:
@@ -283,7 +286,7 @@ def take_pic(stop_event, camera_event, shared_lock, shared_state, model=None, de
         # cv2.destroyAllWindows()
         # reset_gpio()
 
-def camera(stop_event, camera_event, camera_ready, shared_lock, shared_state, args):
+def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, args):
     # --- Setup and Model Loading ---
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -307,7 +310,7 @@ def camera(stop_event, camera_event, camera_ready, shared_lock, shared_state, ar
     print(f"Starting inference with Total Layers Budget: {args.total_layers}")
     model.eval()
     camera_ready.set()
-    take_pic(stop_event, camera_event, shared_lock, shared_state, model, device, args)
+    take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_state, model, device, args)
 
 # if __name__ == "__main__":
 #     parser = argparse.ArgumentParser(description='Stage 2 Adaptive Controller Inference')

@@ -189,7 +189,7 @@ class camera_ui:
     def draw(self):
         return self.BLACK_CAMERA.copy()
 
-def ui_generate(camera_event, stop_event, shared_state, shared_lock, log_queue, total_layers = 12):
+def ui_generate(camera_event, stop_event, low_light_event, shared_state, shared_lock, log_queue, total_layers = 12):
     cpu_plotter = CpuPlotter(max_history=60, height=200, width=640)
     layer_plotter = LayerPlotter(max_history=30, height=200, width=640, total_layers=total_layers)
     console = ConsolePanel(width=1280, height=120, max_lines=6)
@@ -255,12 +255,17 @@ def ui_generate(camera_event, stop_event, shared_state, shared_lock, log_queue, 
             cv2.addWeighted(overlay, 0.6, final_display, 0.4, 0, final_display)
             cv2.putText( final_display, text, (20, 28),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-        cv2.imshow("ADMN Dashboard", final_display)
+        scale = 0.7   # 隨你調整 0.5~1.0
+        display_small = cv2.resize(final_display, None, fx=scale, fy=scale)
+        cv2.imshow("ADMN Dashboard", display_small)
         key = cv2.waitKey(30) & 0xFF
         if key == 27:  # ESC
             stop_event.set()
             camera_event.set()
             break
-        if(key == ord('c')):  # 'c'
+        if(key == ord('c')):  
             console.clear()
+        if(key == ord('l')):  
+            low_light_event.set()
+        if(key == ord('n')):  
+            low_light_event.clear()

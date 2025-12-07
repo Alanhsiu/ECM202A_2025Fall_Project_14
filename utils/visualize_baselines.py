@@ -236,10 +236,10 @@ def plot_dynamic_allocations(data, ax):
     ax.legend(handles=[rgb_patch, depth_patch], loc='upper left', fontsize=10, framealpha=0.9)
     
     # Add model labels
-    legend_models = [mpatches.Patch(color='white', label=model, edgecolor='black') 
-                    for model in models]
-    ax.legend(handles=[rgb_patch, depth_patch] + legend_models, 
-             loc='upper left', fontsize=9, framealpha=0.9, ncol=2)
+    # legend_models = [mpatches.Patch(color='white', label=model, edgecolor='black') 
+    #                 for model in models]
+    # ax.legend(handles=[rgb_patch, depth_patch] + legend_models, 
+    #          loc='upper left', fontsize=9, framealpha=0.9, ncol=2)
 
 def plot_allocation_heatmap(data, ax):
     """Heatmap showing average RGB vs Depth allocation"""

@@ -8,12 +8,17 @@ import pyrealsense2 as rs
 import cv2
 from time import time
 from gpiozero import LED
+from collections import Counter
+from fvcore.nn import FlopCountAnalysis
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.adaptive_controller import AdaptiveGestureClassifier
 from data.gesture_dataset import transform_from_camera
 
 class_names = ['standing', 'left_hand', 'right_hand', 'both_hands']
+
+G_BASE_FLOPS = 0.5e9
+G_PER_LAYER_FLOPS = 1.0e9
 
 # Initialize GPIO LED Configuration ---
 try:
@@ -87,15 +92,75 @@ class LayerPlotter:
 
         return canvas
 
+# --- Calculate Base flops and per layer flops---
+def calibrate_flops_constants(model, device):
+    global G_BASE_FLOPS, G_PER_LAYER_FLOPS
+    print(">>> [System] Calibrating FLOPs constants (Smart Mode)...")
+    
+    try:
+        dummy_rgb = torch.randn(1, 3, 224, 224).to(device)
+        dummy_depth = torch.randn(1, 3, 224, 224).to(device)
+
+        model.eval()
+
+        flops_analyzer = FlopCountAnalysis(model, (dummy_rgb, dummy_depth))
+        flops_analyzer.unsupported_ops_warnings(False) 
+
+        total_precise_flops = flops_analyzer.total()
+        module_flops = flops_analyzer.by_module()
+
+        candidates = []
+        for name, flop in module_flops.items():
+            if flop > total_precise_flops * 0.005: 
+                candidates.append(flop)
+
+        if not candidates:
+            print(">>> [Warning] Calibration input too simple, model skipped all layers!")
+            print(">>> [System] Fallback: Using default estimates.")
+            G_BASE_FLOPS = 2.0e9
+            G_PER_LAYER_FLOPS = 1.0e9
+            return
+
+        def round_to_significant(x, digits=2):
+            if x == 0: return 0
+            return round(x, -int(np.floor(np.log10(x))) + (digits - 1))
+
+        grouped_flops = Counter([round_to_significant(c, 2) for c in candidates])
+
+        most_common_flop_val, count = grouped_flops.most_common(1)[0]
+
+        layer_costs = [c for c in candidates if round_to_significant(c, 2) == most_common_flop_val]
+        avg_layer_cost = sum(layer_costs) / len(layer_costs)
+
+        total_layers_cost = sum(layer_costs)
+
+        calculated_base = total_precise_flops - total_layers_cost
+
+        if calculated_base < 0: calculated_base = 0.1e9
+
+        # uodate global variables for flops calculation
+        G_BASE_FLOPS = calculated_base
+        G_PER_LAYER_FLOPS = avg_layer_cost
+
+        print(f">>> [System] Calibration Done!")
+        # print(f"    - Precise Total: {total_precise_flops/1e9:.2f} GFLOPs")
+        print(f"    - Detected {len(layer_costs)} active layers (avg cost: {avg_layer_cost/1e9:.2f} GFLOPs)")
+        print(f"    - Calculated BASE: {G_BASE_FLOPS/1e9:.2f} GFLOPs")
+        print(f"    - Calculated PER LAYER: {G_PER_LAYER_FLOPS/1e9:.2f} GFLOPs")
+
+    except ImportError:
+        print(">>> [Warning] 'fvcore' not installed. Using default FLOPs constants.")
+    except Exception as e:
+        print(f">>> [Warning] Calibration failed: {e}. Using default constants.")
+
 # --- Conceptual FLOPs Calculation Function ---
 def conceptual_calculate_flops(total_layers, rgb_layers_used, depth_layers_used):
 
-    BASE_FLOPS = 10.0e9    # Fixed cost (GFLOPs)
-    PER_LAYER_FLOPS = 0.5e9 # Cost per ViT layer (GFLOPs)
+    global G_BASE_FLOPS, G_PER_LAYER_FLOPS
 
-    total_flops = BASE_FLOPS + \
-                  (rgb_layers_used * PER_LAYER_FLOPS) + \
-                  (depth_layers_used * PER_LAYER_FLOPS)
+    total_flops = G_BASE_FLOPS + \
+                  (rgb_layers_used * G_PER_LAYER_FLOPS) + \
+                  (depth_layers_used * G_PER_LAYER_FLOPS)
 
     return total_flops / 1e9
 
@@ -301,6 +366,7 @@ def camera(camera_event,camera_ready,args):
 
     print(f"Starting inference with Total Layers Budget: {args.total_layers}")
     model.eval()
+    calibrate_flops_constants(model, device)
     camera_ready.set()
     take_pic(camera_event, model, device, args)
 

@@ -204,12 +204,16 @@ ADMN-RealWorld/
 ├── data/                    # Dataset & loaders
 ├── models/                  # Model architectures
 │   ├── gesture_classifier.py    # Stage 1 model
-│   ├── adaptive_controller.py   # Stage 2 ADMN controller
-│   └── vit_dev.py               # ViT components
+│   └── adaptive_controller.py   # Stage 2 ADMN controller
+├── GTDM_Lowlight/
+│   └── models/
+│       ├── timm_vit.py         # ViT backbone (VisionTransformer)
+│       └── vit_dev.py          # ViT components (TransformerEnc, positionalencoding1d)
 ├── scripts/                 # Training & inference
 │   ├── train_stage1.py
 │   ├── train_stage2.py
-│   └── realtime_inference.py
+│   ├── inference_stage1.py
+│   └── inference_stage2.py
 ├── checkpoints/             # Saved models
 ├── results/                 # Metrics & visualizations
 ├── docs/                    # Project website

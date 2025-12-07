@@ -604,25 +604,26 @@ data/
 |--------|-------------|
 | `models/gesture_classifier.py` | Stage 1 baseline RGB-D classifier |
 | `models/adaptive_controller.py` | Stage 2 ADMN controller |
-| `models/vit_dev.py` | Custom ViT with layer selection |
+| `GTDM_Lowlight/models/timm_vit.py` | ViT backbone |
+| `GTDM_Lowlight/models/vit_dev.py` | Custom ViT with layer selection |
 | `data/gesture_dataset.py` | PyTorch Dataset class |
 | `data/common_loaders.py` | Data loading utilities |
 | `scripts/train_stage1.py` | Stage 1 training script |
 | `scripts/train_stage2.py` | Stage 2 training script |
-| `scripts/realtime_inference.py` | Edge deployment inference |
+| `scripts/inference_stage1.py` | Stage 1 inference script |
+| `scripts/inference_stage2.py` | Stage 2 inference script |
 | `utils/visualize_baselines.py` | Results visualization |
 
 ### Repository
 
-- **GitHub**: [https://github.com/Alanhsiu/ADMN-RealWorld](https://github.com/Alanhsiu/ADMN-RealWorld)
-- **Documentation**: [https://github.com/Alanhsiu/ADMN-RealWorld/wiki](https://github.com/Alanhsiu/ADMN-RealWorld/wiki)
+- **GitHub**: [https://github.com/Alanhsiu/ECM202A_2025Fall_Project_14](https://github.com/Alanhsiu/ECM202A_2025Fall_Project_14)
 
 ### Quick Start
 
 ```bash
 # Clone and setup
-git clone https://github.com/Alanhsiu/ADMN-RealWorld.git
-cd ADMN-RealWorld
+git clone https://github.com/Alanhsiu/ECM202A_2025Fall_Project_14.git
+cd ECM202A_2025Fall_Project_14
 pip install -r requirements.txt
 
 # Train Stage 1
@@ -635,8 +636,12 @@ python scripts/train_stage2.py \
     --output_dir checkpoints/stage2
 
 # Run inference
-python scripts/realtime_inference.py \
-    --model_path checkpoints/stage2/best_controller_12layers.pth
+python scripts/inference_stage1.py \
+    --checkpoint checkpoints/stage1/best_model.pth
+
+# Run inference
+python scripts/inference_stage2.py \
+    --checkpoint checkpoints/stage2/best_controller_12layers.pth
 ```
 
 ---
@@ -658,8 +663,6 @@ For questions or collaborations:
 
 <div align="center">
 
-**Built with ❤️ by the ADMN Team**
-
-[🏠 GitHub Repository](https://github.com/Alanhsiu/ADMN-RealWorld) | [🐛 Report Bug](https://github.com/Alanhsiu/ADMN-RealWorld/issues)
+[🏠 GitHub Repository](https://github.com/Alanhsiu/ECM202A_2025Fall_Project_14) | [🐛 Report Bug](https://github.com/Alanhsiu/ECM202A_2025Fall_Project_14/issues)
 
 </div>

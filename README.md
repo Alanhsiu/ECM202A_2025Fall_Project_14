@@ -6,7 +6,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> 📄 **Full Project Report**: [https://alanhsiu.github.io/ADMN-RealWorld/](https://alanhsiu.github.io/ADMN-RealWorld/)
+> 📄 **Full Project Report**: [https://alanhsiu.github.io/ECM202A_2025Fall_Project_14/](https://alanhsiu.github.io/ECM202A_2025Fall_Project_14/)
 
 ---
 
@@ -193,7 +193,7 @@ python3 scripts/realtime_inference.py \
 | Depth Occluded | 11 | 1 |
 | Low Light | 1 | 11 |
 
-> For detailed results and analysis, see the [full report](https://alanhsiu.github.io/ADMN-RealWorld/).
+> For detailed results and analysis, see the [full report](https://alanhsiu.github.io/ECM202A_2025Fall_Project_14/).
 
 ---
 
@@ -262,8 +262,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-**Built with ❤️ by the ADMN Team**
-
-[📄 Full Report](https://alanhsiu.github.io/ADMN-RealWorld/) | [🐛 Report Bug](https://github.com/Alanhsiu/ADMN-RealWorld/issues)
+[📄 Full Report](https://alanhsiu.github.io/ECM202A_2025Fall_Project_14/) | [🐛 Report Bug](https://github.com/Alanhsiu/ECM202A_2025Fall_Project_14/issues)
 
 </div>

@@ -1,11 +1,13 @@
 import argparse
 import os
+import queue
 import sys
 import threading
 import numpy as np
 import cv2
 import pyaudio
 import time
+from ui import ui_generate
 from stage2_inference_and_performance import camera
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -14,8 +16,22 @@ from collections import deque
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ---- Shared Events ----
+low_light_event = threading.Event()
 camera_event = threading.Event()
 camera_ready = threading.Event()
+stop_event    = threading.Event()   
+
+
+shared_lock   = threading.Lock()
+shared_state  = {
+    "frame": None,      # camera thread write / UI thread read (np.ndarray, shape 480x1280x3)
+    "layer_rgb": None,
+    "layer_depth":None,
+    "last_result": None # dict: {"pred": ..., "rgb": ..., "depth": ..., "latency": ..., "cpu": ...}
+}
+
+log_queue = queue.Queue() 
+
 # --- Audio Settings ---
 AUDIO_THRESHOLD = 3500
 TOGGLE_COOLDOWN = 5.0
@@ -23,64 +39,6 @@ CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
-
-
-
-
-class cpu_usage(object):
-    def __init__(self):
-        self.max_points = 60  # last 60 seconds info
-        self.update_interval = 1000  
-
-        # deque: auto pop old data when maxlen is reached
-        self.cpu_data = deque([psutil.cpu_percent(interval=None)] * self.max_points, maxlen=self.max_points)
-
-        self.fig, self.ax = plt.subplots()
-        self.fig.canvas.manager.set_window_title('CPU Usage Monitor')
-
-        # X axis: 0 to max_points-1
-        self.x_axis = list(range(self.max_points))
-        self.ax.set_xlim(0, self.max_points - 1) 
-        self.ax.set_xticklabels([])
-        self.ax.set_xlabel('Past 1 Minute -> Now')
-
-        # Y axis: 0% to 100%
-        self.ax.set_ylim(0, 100)
-        self.ax.set_ylabel('CPU Usage (%)')
-
-        # Initialize the line/area fill and text label
-        self.line, = self.ax.plot(self.x_axis, self.cpu_data, color='tab:blue', linewidth=2)
-        self.fill = self.ax.fill_between(self.x_axis, self.cpu_data, color='tab:blue', alpha=0.3)
-        self.text_label = self.ax.text(0.02, 0.95, '', transform=self.ax.transAxes, fontsize=12, fontweight='bold', color='tab:blue')
-
-    def update(self, frame):
-        cpu_percent = psutil.cpu_percent(interval=None) # non-blocking, get instant value
-
-        self.cpu_data.append(cpu_percent)
-        self.line.set_ydata(self.cpu_data)
-        
-        self.fill.remove() 
-        self.fill = self.ax.fill_between(self.x_axis, self.cpu_data, color='tab:blue', alpha=0.3)
-        
-        self.text_label.set_text(f"Current: {cpu_percent}%")
-        
-        return self.line, self.text_label
-    
-    def start(self):
-        try:
-            self.ani = animation.FuncAnimation(
-                self.fig, 
-                self.update,
-                interval=self.update_interval, 
-                cache_frame_data=False
-            )
-        
-            plt.tight_layout()
-            plt.grid(True, linestyle='--', alpha=0.5)
-            plt.show()
-        except KeyboardInterrupt:
-            plt.close('all')
-            sys.exit(0)
 
 # ---- Audio RMS Calculation ----
 def get_audio_rms(stream):
@@ -103,21 +61,23 @@ def audio_listener():
         frames_per_buffer=CHUNK
     )
     camera_ready.wait()
-    print('Camera is ready')
+    log_queue.put('Camera is ready')
     audio_start_time = time.time()-TOGGLE_COOLDOWN
     try:
         while True:
+            if stop_event.is_set():
+                break
             current_rms = get_audio_rms(stream)
             if(current_rms > AUDIO_THRESHOLD):
                 if(time.time() - audio_start_time < TOGGLE_COOLDOWN): #  Avoid rapid toggling
-                    print("NOT YET")
+                    log_queue.put("NOT YET")
                     continue
                 elif not camera_event.is_set():
-                    print("Audio trigger detected: START camera")
+                    log_queue.put("Audio trigger detected: START camera")
                     camera_event.set()
                     audio_start_time = time.time()
                 else:
-                    print("Audio trigger detected: STOP camera")
+                    log_queue.put("Audio trigger detected: STOP camera")    
                     camera_event.clear()
                     audio_start_time = time.time()
     finally:
@@ -127,18 +87,20 @@ def audio_listener():
 
 # ---- Main ----
 def main(args):
-    t_worker = threading.Thread(target=camera, args=(camera_event,camera_ready, args),daemon=True)
+    t_camera = threading.Thread(target=camera, args=(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args), daemon=True)
     t_audio = threading.Thread(target=audio_listener, daemon=True)
+    t_ui = threading.Thread(target=ui_generate, args=(camera_event, stop_event, low_light_event, shared_state, shared_lock, log_queue), daemon=True)
     
-    
-    t_worker.start()
+    t_camera.start()
     t_audio.start()
-    
-    cpu = cpu_usage()
-    cpu.start()
+    t_ui.start()
 
-    t_worker.join()
+    # cpu = cpu_usage()
+    # cpu.start()
+
+    t_camera.join()
     t_audio.join()
+    t_ui.join()
     
 
 if __name__ == "__main__":

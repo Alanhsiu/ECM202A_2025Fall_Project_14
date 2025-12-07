@@ -1,0 +1,27 @@
+{
+  "mode": "naive_allocation",
+  "rgb_layers": 6,
+  "depth_layers": 6,
+  "total_layers": 12,
+  "test_accuracy": 73.33333333333333,
+  "test_loss": 0.8541391342878342,
+  "per_corruption_accuracy": {
+    "clean": 87.5,
+    "depth_occluded": 72.5,
+    "low_light": 60.0
+  },
+  "allocations": {
+    "clean": {
+      "rgb": 6.0,
+      "depth": 6.0
+    },
+    "depth_occluded": {
+      "rgb": 6.0,
+      "depth": 6.0
+    },
+    "low_light": {
+      "rgb": 6.0,
+      "depth": 6.0
+    }
+  }
+}

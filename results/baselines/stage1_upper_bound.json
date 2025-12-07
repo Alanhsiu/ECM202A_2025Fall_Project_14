@@ -1,0 +1,21 @@
+{
+  "mode": "upper_bound",
+  "description": "Stage 1 with all 24 layers (RGB 12 + Depth 12)",
+  "rgb_layers": 12,
+  "depth_layers": 12,
+  "total_layers": 24,
+  "best_val_accuracy": 100.0,
+  "test_accuracy": 100.0,
+  "test_loss": 0.02096625417470932,
+  "per_corruption_accuracy": {
+    "clean": 100.0,
+    "depth_occluded": 100.0,
+    "low_light": 100.0
+  },
+  "per_class_accuracy": {
+    "standing": 100.0,
+    "left_hand": 100.0,
+    "right_hand": 100.0,
+    "both_hands": 100.0
+  }
+}

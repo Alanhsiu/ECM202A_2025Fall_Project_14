@@ -1,0 +1,27 @@
+{
+  "mode": "dynamic_allocation",
+  "total_layers": 6,
+  "best_val_accuracy": 65.83333333333333,
+  "test_accuracy": 65.83333333333333,
+  "test_loss": 0.977214440703392,
+  "allocations": {
+    "clean": {
+      "rgb": 4.325,
+      "depth": 1.675
+    },
+    "depth_occluded": {
+      "rgb": 5.0,
+      "depth": 1.0
+    },
+    "low_light": {
+      "rgb": 1.0,
+      "depth": 5.0
+    }
+  },
+  "hyperparameters": {
+    "alpha": 1.0,
+    "beta": 5.0,
+    "lr": 0.0001,
+    "epochs": 100
+  }
+}

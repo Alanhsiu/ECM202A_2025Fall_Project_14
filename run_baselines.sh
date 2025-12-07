@@ -60,7 +60,7 @@ start_time=$(date +%s)
 log_time "Starting Stage 1 training" | tee -a "$STAGE1_LOG"
 
 python scripts/train_stage1.py \
-    --data_dir data \
+    --data_dir data_new \
     --epochs 100 \
     --batch_size 16 \
     --lr 1e-4 \
@@ -92,7 +92,7 @@ log_time "Starting Stage 2 training (12 layers)" | tee -a "$STAGE2_LOG"
 
 python scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
-    --data_dir data \
+    --data_dir data_new \
     --total_layers 12 \
     --batch_size 16 \
     --lr 1e-4 \
@@ -121,7 +121,7 @@ NAIVE_LOG="logs/naive_12_0_$(date +%Y%m%d_%H%M%S).log"
 
 python scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
-    --data_dir data \
+    --data_dir data_new \
     --naive_allocation "12,0" \
     --seed 42 \
     --output_dir results/baselines 2>&1 | tee -a "$NAIVE_LOG"
@@ -134,7 +134,7 @@ NAIVE_LOG="logs/naive_0_12_$(date +%Y%m%d_%H%M%S).log"
 
 python scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
-    --data_dir data \
+    --data_dir data_new \
     --naive_allocation "0,12" \
     --seed 42 \
     --output_dir results/baselines 2>&1 | tee -a "$NAIVE_LOG"
@@ -147,7 +147,7 @@ NAIVE_LOG="logs/naive_6_6_$(date +%Y%m%d_%H%M%S).log"
 
 python scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
-    --data_dir data \
+    --data_dir data_new \
     --naive_allocation "6,6" \
     --seed 42 \
     --output_dir results/baselines 2>&1 | tee -a "$NAIVE_LOG"
@@ -169,7 +169,7 @@ for BUDGET in 4 6 8; do
     
     python scripts/train_stage2.py \
         --stage1_checkpoint checkpoints/stage1/best_model.pth \
-        --data_dir data \
+        --data_dir data_new \
         --total_layers $BUDGET \
         --batch_size 16 \
         --lr 1e-4 \

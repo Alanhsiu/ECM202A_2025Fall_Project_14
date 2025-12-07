@@ -429,7 +429,7 @@ def main(args):
         print("="*60)
         
         # MODIFIED: Gradually increase layerdrop (optional, adaptive regularization)
-        if epoch % 10 == 9 and args.layerdrop > 0:
+        if epoch % 10 == 9:
             new_rate = min(args.max_layerdrop, model.vision.layerdrop_rate + 0.1)
             # new_rate = min(args.max_layerdrop, model.vision.layerdrop_rate + 0.05)
             if new_rate > model.vision.layerdrop_rate:

@@ -475,12 +475,18 @@ def validate_naive(model, dataloader, criterion, device, rgb_layers, depth_layer
     #          12 layers = all 1s
     #          0 layers = all 0s (no processing)
     
-    def create_layer_mask(num_layers):
+    def create_layer_mask(num_layers, type='rgb'):
         mask = torch.zeros(12)
         if num_layers <= 0:
             return mask
         elif num_layers >= 12:
             mask[:] = 1.0
+        elif num_layers == 6: # Manually set the layers for 6 layers
+            # if type == 'rgb':
+            #     mask[[0, 5, 6, 7, 9, 11]] = 1.0
+            # elif type == 'depth':
+            #     mask[[0, 5, 6, 8, 11]] = 1.0
+            mask[[0, 1, 3, 8, 10, 11]] = 1.0
         else:
             # Always include layer 0
             mask[0] = 1.0
@@ -490,8 +496,8 @@ def validate_naive(model, dataloader, criterion, device, rgb_layers, depth_layer
                 mask[12-remaining:] = 1.0
         return mask
     
-    rgb_mask = create_layer_mask(rgb_layers)
-    depth_mask = create_layer_mask(depth_layers)
+    rgb_mask = create_layer_mask(rgb_layers, type='rgb')
+    depth_mask = create_layer_mask(depth_layers, type='depth')
     
     rgb_mask = rgb_mask.to(device)
     depth_mask = depth_mask.to(device)

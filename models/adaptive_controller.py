@@ -249,7 +249,11 @@ class AdaptiveGestureClassifier(nn.Module):
             self._load_stage1_weights(stage1_checkpoint)
     
     def _load_stage1_weights(self, checkpoint_path):
-        """Load Stage 1 weights and freeze backbone/fusion/classifier"""
+        """Load Stage 1 weights and freeze ALL Stage 1 components.
+        
+        Stage 2 training: Only controller (qoi_perception, layer_allocator) is trainable.
+        All Stage 1 components (backbones, adapters, fusion, classifier) are frozen.
+        """
         print(f"Loading Stage 1 weights from {checkpoint_path}")
         
         checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
@@ -258,53 +262,52 @@ class AdaptiveGestureClassifier(nn.Module):
         msg = self.load_state_dict(checkpoint['model_state_dict'], strict=False)
         print(f"Loaded Stage 1 weights: {msg}")
         
-        # Freeze early layers, unfreeze last 4 layers
-        print("\nFreezing strategy:")
+        print("\nFreezing strategy: Only controller is trainable")
         
-        # RGB backbone: freeze first 8 layers, unfreeze last 4
-        for i, block in enumerate(self.vision.blocks):
-            if i < 8:  # Freeze layers 0-7
-                for param in block.parameters():
-                    param.requires_grad = False
-            else:  # Unfreeze layers 8-11
-                for param in block.parameters():
-                    param.requires_grad = True
+        # ========================================
+        # Freeze ALL Stage 1 components
+        # ========================================
         
-        # Depth backbone: same strategy
-        for i, block in enumerate(self.depth.blocks):
-            if i < 8:
-                for param in block.parameters():
-                    param.requires_grad = False
-            else:
-                for param in block.parameters():
-                    param.requires_grad = True
-        
-        # Freeze patch embeddings
-        for param in self.vision.patch_embed.parameters():
-            param.requires_grad = False
-        for param in self.depth.patch_embed.parameters():
+        # Freeze RGB backbone (all layers)
+        for param in self.vision.parameters():
             param.requires_grad = False
         
-        # Unfreeze adapters
+        # Freeze Depth backbone (all layers)
+        for param in self.depth.parameters():
+            param.requires_grad = False
+        
+        # Freeze adapters
         for param in self.vision_adapter.parameters():
-            param.requires_grad = True
+            param.requires_grad = False
         for param in self.depth_adapter.parameters():
-            param.requires_grad = True
+            param.requires_grad = False
         
-        # Unfreeze fusion encoder
+        # Freeze fusion encoder
         for param in self.encoder.parameters():
+            param.requires_grad = False
+        
+        # Freeze classifier
+        for param in self.classifier.parameters():
+            param.requires_grad = False
+        
+        # ========================================
+        # Ensure controller components are trainable
+        # ========================================
+        
+        # QoI Perception Module
+        for param in self.qoi_perception.parameters():
             param.requires_grad = True
         
-        # Unfreeze classifier
-        for param in self.classifier.parameters():
+        # Layer Allocation Module
+        for param in self.layer_allocator.parameters():
             param.requires_grad = True
         
         frozen_params = sum(p.numel() for p in self.parameters() if not p.requires_grad)
         trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         
-        print(f"✅ Partial fine-tuning enabled")
-        print(f"  Frozen params: {frozen_params:,}")
-        print(f"  Trainable params: {trainable_params:,}")
+        print(f"✅ Stage 2: Only controller is trainable")
+        print(f"  Frozen params (Stage 1): {frozen_params:,}")
+        print(f"  Trainable params (Controller): {trainable_params:,}")
     
     def forward(self, rgb, depth, temperature=1.0, return_allocation=False):
         """

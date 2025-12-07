@@ -330,6 +330,29 @@ def plot_test_loss_comparison(data, ax):
     ax.set_title('Test Loss Comparison (Lower is Better)', fontweight='bold', fontsize=14, pad=20)
     ax.grid(axis='y', alpha=0.3)
 
+def save_individual_subplots(data):
+    """Save each subplot as its own PNG for focused views."""
+    output_dir = Path('results')
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    subplot_jobs = [
+        ('baseline_overall_accuracy.png', plot_overall_accuracy, (10, 7)),
+        ('baseline_test_loss.png', plot_test_loss_comparison, (8, 6)),
+        ('baseline_per_corruption_accuracy.png', plot_per_corruption, (12, 7)),
+        ('baseline_layer_budget_vs_accuracy.png', plot_layer_budget_vs_accuracy, (10, 7)),
+        ('baseline_dynamic_allocations.png', plot_dynamic_allocations, (9, 7)),
+        ('baseline_allocation_heatmap.png', plot_allocation_heatmap, (8, 7)),
+    ]
+
+    for filename, plot_fn, figsize in subplot_jobs:
+        fig, ax = plt.subplots(figsize=figsize)
+        plot_fn(data, ax)
+        fig.tight_layout()
+        output_path = output_dir / filename
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+        plt.close(fig)
+        print(f"✅ Subplot saved to: {output_path}")
+
 def main():
     print("Loading baseline results...")
     data = load_results()
@@ -370,6 +393,9 @@ def main():
     output_pdf = 'results/baseline_comparison.pdf'
     plt.savefig(output_pdf, bbox_inches='tight', facecolor='white')
     print(f"✅ PDF saved to: {output_pdf}")
+
+    # Save each subplot as its own high-res PNG
+    save_individual_subplots(data)
     
     plt.show()
     

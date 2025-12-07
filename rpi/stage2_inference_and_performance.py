@@ -1,0 +1,324 @@
+import os
+import sys
+import torch
+from tqdm import tqdm
+import argparse
+import numpy as np
+import pyrealsense2 as rs
+import cv2
+from time import time
+from gpiozero import LED
+from collections import Counter
+from fvcore.nn import FlopCountAnalysis
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from models.adaptive_controller import AdaptiveGestureClassifier
+from data.gesture_dataset import transform_from_camera
+
+class_names = ['standing', 'left_hand', 'right_hand', 'both_hands']
+
+G_BASE_FLOPS = 0.5e9
+G_PER_LAYER_FLOPS = 1.0e9
+PIC_INTERVAL = 5.0  
+
+# Initialize GPIO LED Configuration ---
+try:
+    led_1 = LED(27)   # red LED GPIO 27
+    led_2 = LED(22)   # green LED GPIO 22
+    led_3 = LED(17)   # blue LED GPIO 17
+    led_4 = LED(5)    # yellow LED GPIO 5
+    led_5 = LED(6)
+    print("[System] GPIO LEDs initialized.")
+except Exception as e:
+    print(f"[System] GPIO Init Failed: {e} (Ignore if not on RPi)")
+    led_1 = None
+    led_2 = None
+    led_3 = None
+    led_4 = None
+    led_5 = None
+
+# --- Calculate Base flops and per layer flops---
+def calibrate_flops_constants(model, device):
+    global G_BASE_FLOPS, G_PER_LAYER_FLOPS
+    print(">>> [System] Calibrating FLOPs constants (Smart Mode)...")
+    
+    try:
+        dummy_rgb = torch.randn(1, 3, 224, 224).to(device)
+        dummy_depth = torch.randn(1, 3, 224, 224).to(device)
+
+        model.eval()
+
+        flops_analyzer = FlopCountAnalysis(model, (dummy_rgb, dummy_depth))
+        flops_analyzer.unsupported_ops_warnings(False) 
+
+        total_precise_flops = flops_analyzer.total()
+        module_flops = flops_analyzer.by_module()
+
+        candidates = []
+        for name, flop in module_flops.items():
+            if flop > total_precise_flops * 0.005: 
+                candidates.append(flop)
+
+        if not candidates:
+            print(">>> [Warning] Calibration input too simple, model skipped all layers!")
+            print(">>> [System] Fallback: Using default estimates.")
+            G_BASE_FLOPS = 2.0e9
+            G_PER_LAYER_FLOPS = 1.0e9
+            return
+
+        def round_to_significant(x, digits=2):
+            if x == 0: return 0
+            return round(x, -int(np.floor(np.log10(x))) + (digits - 1))
+
+        grouped_flops = Counter([round_to_significant(c, 2) for c in candidates])
+
+        most_common_flop_val, count = grouped_flops.most_common(1)[0]
+
+        layer_costs = [c for c in candidates if round_to_significant(c, 2) == most_common_flop_val]
+        avg_layer_cost = sum(layer_costs) / len(layer_costs)
+
+        total_layers_cost = sum(layer_costs)
+
+        calculated_base = total_precise_flops - total_layers_cost
+
+        if calculated_base < 0: calculated_base = 0.1e9
+
+        # uodate global variables for flops calculation
+        G_BASE_FLOPS = calculated_base
+        G_PER_LAYER_FLOPS = avg_layer_cost
+
+        print(f">>> [System] Calibration Done!")
+        # print(f"    - Precise Total: {total_precise_flops/1e9:.2f} GFLOPs")
+        print(f"    - Detected {len(layer_costs)} active layers (avg cost: {avg_layer_cost/1e9:.2f} GFLOPs)")
+        print(f"    - Calculated BASE: {G_BASE_FLOPS/1e9:.2f} GFLOPs")
+        print(f"    - Calculated PER LAYER: {G_PER_LAYER_FLOPS/1e9:.2f} GFLOPs")
+
+    except ImportError:
+        print(">>> [Warning] 'fvcore' not installed. Using default FLOPs constants.")
+    except Exception as e:
+        print(f">>> [Warning] Calibration failed: {e}. Using default constants.")
+
+# --- Conceptual FLOPs Calculation Function ---
+def conceptual_calculate_flops(total_layers, rgb_layers_used, depth_layers_used):
+
+    global G_BASE_FLOPS, G_PER_LAYER_FLOPS
+
+    total_flops = G_BASE_FLOPS + \
+                  (rgb_layers_used * G_PER_LAYER_FLOPS) + \
+                  (depth_layers_used * G_PER_LAYER_FLOPS)
+
+    return total_flops / 1e9
+
+# Update LED state by new predicted gesture ---
+def update_led(label):
+    if led_1 is None or led_2 is None or led_3 is None or led_4 is None or led_5 is None:
+            return
+    if label != 'standing':
+        led_1.off()
+    if label != 'left_hand':
+        led_2.off()
+    if label != 'right_hand':
+        led_3.off()
+    if label != 'both_hands':
+        led_4.off()
+        
+    if label == 'standing':
+        if not led_1.is_lit:
+            led_1.blink(on_time=0.5, off_time=0, n=1, background=True)
+    elif label == 'left_hand':
+        if not led_2.is_lit:
+            led_2.blink(on_time=0.5, off_time=0, n=1, background=True)
+    elif label == 'right_hand':
+        if not led_3.is_lit:
+            led_3.blink(on_time=0.5, off_time=0, n=1, background=True)
+    elif label == 'both_hands':
+        if not led_4.is_lit:
+            led_4.blink(on_time=0.5, off_time=0, n=1, background=True)
+
+# Reset GPIO
+def reset_gpio():
+    if led_1: led_1.off()
+    if led_2: led_2.off()
+    if led_3: led_3.off()
+    if led_4: led_4.off()
+    if led_5: led_5.off()
+
+# --- Inference Function ---
+def inference_stage2(model, data, device, temperature=0.5):
+
+    with torch.no_grad():
+        rgb = data['rgb'].to(device)
+        depth = data['depth'].to(device)
+
+        # Measure model runtime (Latency)
+        start_time = time()
+
+        logits, layer_allocation = model(
+            rgb, 
+            depth, 
+            temperature=temperature,
+            return_allocation=True
+        )
+
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
+
+        end_time = time()
+
+        # Prediction results
+        _, predicted = torch.max(logits, 1)
+        pred_label = class_names[predicted.item()]
+        # Calculate actual allocated layer counts
+        rgb_layers = layer_allocation[0, 0, :].sum().item()
+        depth_layers = layer_allocation[0, 1, :].sum().item()
+
+    latency_ms = (end_time - start_time)*1000
+    
+    return pred_label, rgb_layers, depth_layers, latency_ms
+
+def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_state, log_queue, model=None, device=None, args=None):
+    # Configure depth and color streams
+    pipeline = rs.pipeline()
+    config = rs.config()
+
+    # Enable streams (you can adjust resolution, format, and FPS as needed)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+
+    is_pipeline_active = False
+    low_light = False
+    camera_event.wait() # wait for the first trigger to start camera
+    
+    try:
+        while True:
+            if stop_event.is_set():
+                break
+            if not camera_event.is_set():
+                if is_pipeline_active:
+                    log_queue.put(">>> [Camera] Stopping Camera (Sleep Mode)...")
+                    log_queue.put("=========================================================")
+                    pipeline.stop()
+                    led_5.off()
+                    is_pipeline_active = False
+                    reset_gpio()
+                    with shared_lock:
+                        shared_state["frame"] = None
+                        shared_state["layer_rgb"] = None
+                        shared_state["layer_depth"] = None
+                        shared_state["last_result"] = None
+                camera_event.wait()
+                continue
+            elif is_pipeline_active == False:
+                log_queue.put(">>> [Camera] Starting Camera...")
+                log_queue.put("=========================================================")
+                profile = pipeline.start(config)
+                dd = profile.get_device()
+                color_sensor = dd.first_color_sensor() 
+                
+                led_5.on()
+                is_pipeline_active = True
+                last_capture_time = time() - PIC_INTERVAL  # Force immediate capture on start
+
+            frames = pipeline.wait_for_frames()
+            depth_frame = frames.get_depth_frame()
+            color_frame = frames.get_color_frame()
+
+            depth_image = np.asanyarray(depth_frame.get_data())
+            color_image = np.asanyarray(color_frame.get_data())
+
+            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+
+            combined_camera = np.hstack((color_image, depth_colormap))
+            
+            with shared_lock: # real-time camera frame update
+                shared_state["frame"] = combined_camera.copy()
+
+            if  low_light == False and low_light_event.is_set(): # low light mode
+                log_queue.put(">>> [Camera] Low Light Mode Activated.")
+                log_queue.put("=========================================================")
+                low_light = True
+
+                color_sensor.set_option(rs.option.enable_auto_exposure, 0) # disable auto exposure                 
+                color_sensor.set_option(rs.option.exposure, 10.0) # set exposure 
+                min_gain = color_sensor.get_option_range(rs.option.gain).min # set gain to min
+                color_sensor.set_option(rs.option.gain, min_gain)
+                continue
+
+            if low_light and low_light_event.is_set() == False:
+                log_queue.put(">>> [Camera] Exiting Low Light Mode.")
+                low_light = False
+                color_sensor.set_option(rs.option.enable_auto_exposure, 1) # enable auto exposure
+                continue
+
+            if time() - last_capture_time >= PIC_INTERVAL:
+                
+                log_queue.put("==> Captured one RGB+Depth, sending to model...")
+                last_capture_time = time()
+
+                data = transform_from_camera(color_image, depth_colormap)
+                pred_label, rgb_layers, depth_layers, latency_ms= inference_stage2(model, data, device)
+                update_led(pred_label)
+                flops = conceptual_calculate_flops(
+                    total_layers=args.total_layers,
+                    rgb_layers_used=rgb_layers,
+                    depth_layers_used=depth_layers
+                )
+                log_queue.put(f"===> Prediction: {pred_label}")
+                log_queue.put(f"===> Used Layers - RGB: {int(rgb_layers)} Depth: {int(depth_layers)}")
+                log_queue.put(f"===> Estimated FLOPs: {flops:.2f} GFLOPs")
+                log_queue.put(f"===> Latency: {latency_ms:.1f} ms")
+                log_queue.put("=========================================================")
+                with shared_lock:
+                    shared_state["frame"] = combined_camera.copy()
+                    shared_state["layer_rgb"] = rgb_layers
+                    shared_state["layer_depth"] = depth_layers
+                    shared_state["last_result"] = f"Pred: {pred_label} | RGB: {int(rgb_layers)} | Depth: {int(depth_layers)} | {latency_ms:.1f} ms"
+        
+    finally:
+        if is_pipeline_active:
+            pipeline.stop()
+        reset_gpio()
+
+def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args):
+    # --- Setup and Model Loading ---
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    if torch.cuda.is_available():
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+
+    log_queue.put("Creating model...")
+    model = AdaptiveGestureClassifier(
+        num_classes=4,
+        adapter_hidden_dim=256,
+        total_layers=args.total_layers,
+        qoi_dim=128,
+        stage1_checkpoint=None
+    ).to(device)
+
+    # Load the trained Stage 2 model weights
+    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    log_queue.put(f"Starting inference with Total Layers Budget: {args.total_layers}")
+    model.eval()
+    calibrate_flops_constants(model, device)
+    camera_ready.set()
+    take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_state, log_queue, model, device, args)
+
+# if __name__ == "__main__":
+#     parser = argparse.ArgumentParser(description='Stage 2 Adaptive Controller Inference')
+
+#     # Data
+#     parser.add_argument('--data_dir', type=str, default='../data/clean',
+#                         help='Path to the directory containing test data.')
+
+#     # Model/Checkpoint
+#     parser.add_argument('--checkpoint', type=str, 
+#                         default='best_controller_12layers.pth',
+#                         help='Path to the trained Stage 2 controller checkpoint.')
+#     parser.add_argument('--total_layers', type=int, default=12,
+#                         help='Total layer budget used during Stage 2 training.')
+
+#     args = parser.parse_args()
+
+#     camera(args)

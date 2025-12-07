@@ -11,5 +11,7 @@ data/__pycache__/
 data_new/
 
 models/__pycache__/
+**/.DS_Store
 
 scripts/__pycache__/
+rpi/best_model.pth

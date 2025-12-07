@@ -1,6 +1,13 @@
+#!/bin/bash
+set -e
+
+# Ensure we run from repository root so relative paths work
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
+
 start_time=$(date +%s)
 echo "Starting Stage 1 training, start time: $(date)" >> logs/stage1.log
-python scripts/train_stage1.py \
+python software/scripts/train_stage1.py \
     --data_dir data \
     --epochs 100 \
     --batch_size 16 \
@@ -16,7 +23,7 @@ echo "Time taken: $((end_time - start_time)) seconds" >> logs/stage1.log
 
 start_time=$(date +%s)
 echo "Starting Stage 2 training, start time: $(date)" >> logs/stage2.log
-python scripts/train_stage2.py \
+python software/scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
     --data_dir data \
     --total_layers 12 \

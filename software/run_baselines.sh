@@ -11,6 +11,10 @@
 
 set -e  # Exit on error
 
+# Ensure we run from repository root so relative paths work
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
+
 # Create directories
 mkdir -p logs
 mkdir -p checkpoints/stage1
@@ -59,7 +63,7 @@ echo "Log file: $STAGE1_LOG"
 start_time=$(date +%s)
 log_time "Starting Stage 1 training" | tee -a "$STAGE1_LOG"
 
-python scripts/train_stage1.py \
+python software/scripts/train_stage1.py \
     --data_dir data_new \
     --epochs 100 \
     --batch_size 16 \
@@ -90,7 +94,7 @@ echo "Log file: $STAGE2_LOG"
 start_time=$(date +%s)
 log_time "Starting Stage 2 training (12 layers)" | tee -a "$STAGE2_LOG"
 
-python scripts/train_stage2.py \
+python software/scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
     --data_dir data_new \
     --total_layers 12 \
@@ -119,7 +123,7 @@ print_header "3. NAIVE ALLOCATION: Fixed Layer Allocation Tests"
 echo "Testing Naive Allocation: RGB=12, Depth=0"
 NAIVE_LOG="logs/naive_12_0_$(date +%Y%m%d_%H%M%S).log"
 
-python scripts/train_stage2.py \
+python software/scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
     --data_dir data_new \
     --naive_allocation "12,0" \
@@ -132,7 +136,7 @@ print_success "Naive (12/0) completed"
 echo "Testing Naive Allocation: RGB=0, Depth=12"
 NAIVE_LOG="logs/naive_0_12_$(date +%Y%m%d_%H%M%S).log"
 
-python scripts/train_stage2.py \
+python software/scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
     --data_dir data_new \
     --naive_allocation "0,12" \
@@ -145,7 +149,7 @@ print_success "Naive (0/12) completed"
 echo "Testing Naive Allocation: RGB=6, Depth=6"
 NAIVE_LOG="logs/naive_6_6_$(date +%Y%m%d_%H%M%S).log"
 
-python scripts/train_stage2.py \
+python software/scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
     --data_dir data_new \
     --naive_allocation "6,6" \
@@ -167,7 +171,7 @@ for BUDGET in 4 6 8; do
     start_time=$(date +%s)
     log_time "Starting Stage 2 training ($BUDGET layers)" | tee -a "$BUDGET_LOG"
     
-    python scripts/train_stage2.py \
+    python software/scripts/train_stage2.py \
         --stage1_checkpoint checkpoints/stage1/best_model.pth \
         --data_dir data_new \
         --total_layers $BUDGET \

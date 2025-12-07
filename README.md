@@ -67,6 +67,9 @@ data/
     └── [same structure]
 ```
 
+- Full dataset download (for `data_new/`): [Google Drive folder](https://drive.google.com/drive/folders/17sohVmte4j93pvPY2eXT6pf6A9uESkiA?usp=sharing) containing `clean`, `depth_occluded`, `low_light`.
+- Place the downloaded folders inside `data_new/` (i.e., `data_new/clean`, `data_new/depth_occluded`, `data_new/low_light`).
+
 ---
 
 ## 🎓 Training
@@ -74,13 +77,13 @@ data/
 ### Quick Run (Stage 1 → Stage 2)
 
 ```bash
-bash run.sh
+bash software/run.sh
 ```
 
 ### Stage 1: Baseline Classifier
 
 ```bash
-python scripts/train_stage1.py \
+python software/scripts/train_stage1.py \
     --data_dir data \
     --epochs 100 \
     --batch_size 16 \
@@ -91,7 +94,7 @@ python scripts/train_stage1.py \
 ### Stage 2: Adaptive Controller
 
 ```bash
-python scripts/train_stage2.py \
+python software/scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
     --data_dir data \
     --total_layers 12 \
@@ -101,8 +104,16 @@ python scripts/train_stage2.py \
 ### Run Baselines
 
 ```bash
-bash run_baselines.sh
+bash software/run_baselines.sh
 ```
+
+### Reproduce Reported Results
+
+1) Download the full dataset from the Google Drive link above and place it under `data_new/` (preserves the `clean/depth_occluded/low_light` subfolders).  
+2) Train and evaluate:  
+   - Quick pipeline: `bash software/run.sh` (Stage 1 + Stage 2).  
+   - Baseline suite: `bash software/run_baselines.sh` (includes dynamic/naive/reduced budgets).  
+3) Results and logs will appear in `checkpoints/`, `logs/`, and `results/baselines/` as in the report.
 
 ---
 
@@ -111,6 +122,11 @@ bash run_baselines.sh
 ### Single-Sample Inference
 
 ```python
+import sys
+
+# Make project modules available when running from repo root
+sys.path.append("software")
+
 import torch
 from PIL import Image
 from models.adaptive_controller import AdaptiveGestureClassifier
@@ -162,7 +178,7 @@ pip3 install -r requirements_rpi.txt
 ### Real-Time Inference
 
 ```bash
-python3 scripts/realtime_inference.py \
+python3 software/scripts/realtime_inference.py \
     --model_path checkpoints/stage2/best_controller_12layers.pth \
     --camera_id 0
 ```
@@ -201,24 +217,25 @@ python3 scripts/realtime_inference.py \
 
 ```
 ADMN-RealWorld/
+├── software/                # Code & run scripts
+│   ├── run.sh               # Quick train script
+│   ├── run_baselines.sh     # Baseline experiments
+│   ├── scripts/             # Training & inference
+│   │   ├── train_stage1.py
+│   │   ├── train_stage2.py
+│   │   ├── inference_stage1.py
+│   │   └── inference_stage2.py
+│   ├── models/              # Model architectures
+│   │   ├── gesture_classifier.py
+│   │   └── adaptive_controller.py
+│   ├── GTDM_Lowlight/       # ViT backbone and components
+│   │   └── models/
+│   ├── rpi/                 # Raspberry Pi inference helpers
+│   └── utils/               # Utilities & visualization
 ├── data/                    # Dataset & loaders
-├── models/                  # Model architectures
-│   ├── gesture_classifier.py    # Stage 1 model
-│   └── adaptive_controller.py   # Stage 2 ADMN controller
-├── GTDM_Lowlight/
-│   └── models/
-│       ├── timm_vit.py         # ViT backbone (VisionTransformer)
-│       └── vit_dev.py          # ViT components (TransformerEnc, positionalencoding1d)
-├── scripts/                 # Training & inference
-│   ├── train_stage1.py
-│   ├── train_stage2.py
-│   ├── inference_stage1.py
-│   └── inference_stage2.py
 ├── checkpoints/             # Saved models
 ├── results/                 # Metrics & visualizations
-├── docs/                    # Project website
-├── run.sh                   # Quick train script
-├── run_baselines.sh         # Baseline experiments
+├── doc/                     # Project website
 └── requirements.txt
 ```
 

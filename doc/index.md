@@ -577,6 +577,8 @@ data/
     └── [same structure]
 ```
 
+- **Full dataset download (for `data_new/`)**: [Google Drive folder](https://drive.google.com/drive/folders/17sohVmte4j93pvPY2eXT6pf6A9uESkiA?usp=sharing) containing `clean`, `depth_occluded`, and `low_light`. Place them under `data_new/` to match the training commands below.
+
 ### Preprocessing
 
 1. Resize to 224×224
@@ -602,17 +604,17 @@ data/
 
 | Module | Description |
 |--------|-------------|
-| `models/gesture_classifier.py` | Stage 1 baseline RGB-D classifier |
-| `models/adaptive_controller.py` | Stage 2 ADMN controller |
-| `GTDM_Lowlight/models/timm_vit.py` | ViT backbone |
-| `GTDM_Lowlight/models/vit_dev.py` | Custom ViT with layer selection |
+| `software/models/gesture_classifier.py` | Stage 1 baseline RGB-D classifier |
+| `software/models/adaptive_controller.py` | Stage 2 ADMN controller |
+| `software/GTDM_Lowlight/models/timm_vit.py` | ViT backbone |
+| `software/GTDM_Lowlight/models/vit_dev.py` | Custom ViT with layer selection |
 | `data/gesture_dataset.py` | PyTorch Dataset class |
 | `data/common_loaders.py` | Data loading utilities |
-| `scripts/train_stage1.py` | Stage 1 training script |
-| `scripts/train_stage2.py` | Stage 2 training script |
-| `scripts/inference_stage1.py` | Stage 1 inference script |
-| `scripts/inference_stage2.py` | Stage 2 inference script |
-| `utils/visualize_baselines.py` | Results visualization |
+| `software/scripts/train_stage1.py` | Stage 1 training script |
+| `software/scripts/train_stage2.py` | Stage 2 training script |
+| `software/scripts/inference_stage1.py` | Stage 1 inference script |
+| `software/scripts/inference_stage2.py` | Stage 2 inference script |
+| `software/utils/visualize_baselines.py` | Results visualization |
 
 ### Repository
 
@@ -627,22 +629,30 @@ cd ECM202A_2025Fall_Project_14
 pip install -r requirements.txt
 
 # Train Stage 1
-python scripts/train_stage1.py --data_dir data --output_dir checkpoints/stage1
+python software/scripts/train_stage1.py --data_dir data --output_dir checkpoints/stage1
 
 # Train Stage 2
-python scripts/train_stage2.py \
+python software/scripts/train_stage2.py \
     --stage1_checkpoint checkpoints/stage1/best_model.pth \
     --total_layers 12 \
     --output_dir checkpoints/stage2
 
 # Run inference
-python scripts/inference_stage1.py \
+python software/scripts/inference_stage1.py \
     --checkpoint checkpoints/stage1/best_model.pth
 
 # Run inference
-python scripts/inference_stage2.py \
+python software/scripts/inference_stage2.py \
     --checkpoint checkpoints/stage2/best_controller_12layers.pth
 ```
+
+### Reproduce Reported Results
+
+1) Download the full dataset from the Google Drive link above and place it under `data_new/` (keep `clean/depth_occluded/low_light` subfolders).  
+2) Run training/evaluation:  
+   - Quick pipeline: `bash software/run.sh` (Stage 1 → Stage 2).  
+   - Baseline suite: `bash software/run_baselines.sh` (dynamic/naive/reduced budgets).  
+3) Outputs land in `checkpoints/`, `logs/`, and `results/baselines/`, matching the reported results.
 
 ---
 

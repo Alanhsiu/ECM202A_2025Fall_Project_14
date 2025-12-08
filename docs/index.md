@@ -376,9 +376,10 @@ where:
 - Batch size: 16 (limited by GPU memory)
 
 **Deployment Environment**:
-- Raspberry Pi 5 (4GB RAM)
-- Intel RealSense D435 (RGB-D camera)
+- Raspberry Pi 5 (8GB RAM)
+- Intel RealSense L515 (RGB-D camera)
 - PyTorch CPU-only build
+- KISEER USB 2.0 Mini Microphone
 
 ### Edge Deployment Performance
 
@@ -559,7 +560,7 @@ The key insight is that quality-aware dynamic allocation can match fixed-allocat
 ### Primary Dataset
 
 - **Source**: Self-collected RGB-D dataset
-- **Collection Device**: Intel RealSense D435
+- **Collection Device**: Intel RealSense L515
 - **Format**: PNG images (RGB: 3-channel, Depth: 1-channel grayscale)
 - **Structure**:
 ```
@@ -598,7 +599,7 @@ data/
 | NumPy | 1.24+ | Numerical operations |
 | Matplotlib | 3.x | Visualization |
 | TensorBoard | 2.x | Training logging |
-| pyrealsense2 | 2.x | RealSense camera interface |
+| pyrealsense2 | 2.50 | RealSense camera interface |
 
 ### Internal Modules
 

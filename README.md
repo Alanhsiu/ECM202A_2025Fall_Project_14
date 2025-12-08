@@ -165,14 +165,94 @@ print(f"Depth layers: {allocation[0, 1].sum().item():.0f}/12")
 ### Setup
 
 ```bash
-sudo apt-get update
-sudo apt-get install python3-pip python3-opencv
+sudo apt update
+sudo apt upgrade -y
 
-# Install PyTorch (CPU)
-pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Realsense and pyrealsense set up for Raspberry Pi 5
 
-# Install dependencies
-pip3 install -r requirements_rpi.txt
+## Install packages
+sudo apt-get install -y libdrm-amdgpu1 libdrm-amdgpu1-dbgsym libdrm-dev libdrm-exynos1 libdrm-exynos1-dbgsym libdrm-freedreno1 libdrm-freedreno1-dbgsym libdrm-nouveau2 libdrm-nouveau2-dbgsym libdrm-omap1 libdrm-omap1-dbgsym libdrm-radeon1 libdrm-radeon1-dbgsym libdrm-tegra0 libdrm-tegra0-dbgsym libdrm2 libdrm2-dbgsym
+
+sudo apt-get install -y libglu1-mesa libglu1-mesa-dev glusterfs-common libglu1-mesa libglu1-mesa-dev libglui-dev libglui2c2
+
+sudo apt-get install -y libglu1-mesa libglu1-mesa-dev mesa-utils mesa-utils-extra xorg-dev libgtk-3-dev libusb-1.0-0-dev
+
+## Download librealsense v2.50.0
+https://github.com/realsenseai/librealsense/archive/refs/tags/v2.50.0.zip
+
+unzip v2.50.0.zip
+cd librealsense
+sudo cp config/99-realsense-libusb.rules /etc/udev/rules.d/ 
+sudo udevadm control --reload-rules && sudo udevadm trigger
+
+## Install protobuf
+cd ~
+git clone --depth=1 -b v3.5.1 https://github.com/google/protobuf.git
+cd protobuf
+./autogen.sh
+./configure
+make -j$(nproc)
+sudo make install
+cd python
+export LD_LIBRARY_PATH=../src/.libs
+python3 setup.py build --cpp_implementation 
+python3 setup.py test --cpp_implementation
+sudo python3 setup.py install --cpp_implementation
+export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=cpp
+export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION_VERSION=3
+sudo ldconfig
+protoc --version
+
+## Install TBB
+cd ~
+wget https://github.com/PINTO0309/TBBonARMv7/raw/master/libtbb-dev_2018U2_armhf.deb
+sudo dpkg -i ~/libtbb-dev_2018U2_armhf.deb
+sudo ldconfig
+rm libtbb-dev_2018U2_armhf.deb
+
+## Install OpenCV (C++ Library for RealSense)
+wget https://github.com/mt08xx/files/raw/master/opencv-rpi/libopencv3_3.4.3-20180907.1_armhf.deb
+sudo apt install -y ./libopencv3_3.4.3-20180907.1_armhf.deb
+sudo ldconfig
+
+## Install RealSense SDK/librealsense
+cd ~/librealsense-2.50.0
+mkdir  build  && cd build
+cmake .. -DBUILD_EXAMPLES=true -DCMAKE_BUILD_TYPE=Release -DFORCE_LIBUVC=true
+make -j$(nproc)
+sudo make install
+
+## Install pyrealsense2
+cd ~/librealsense-2.50.0/build
+cmake .. -DBUILD_PYTHON_BINDINGS=bool:true -DPYTHON_EXECUTABLE=$(which python3)
+make -j$(nproc)
+sudo make install
+
+### Add python path
+vim ~/.zshrc
+export PYTHONPATH=$PYTHONPATH:/usr/local/lib
+
+source ~/.zshrc
+
+## Try RealSense
+realsense-viewer
+
+# Libraries Installation for software function
+
+## Install PyTorch (CPU)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+## Install OpenCv for python
+pip install opencv-python
+
+## Install gpiozero for GPIO control
+pip install gpiozero
+
+## Install pyaudio for enabling microphone audio
+pip install pyaudio
+
+## Install psutil for providing system information
+pip install psutil
 ```
 
 ### Real-Time Inference

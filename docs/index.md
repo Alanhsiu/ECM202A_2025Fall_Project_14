@@ -148,6 +148,16 @@ The main challenges we addressed:
 
 ## **3.1 System Architecture**
 
+### System Overview
+
+<img width="752" height="275" alt="Screenshot 2025-12-08 233310" src="https://github.com/user-attachments/assets/10f7483b-9984-4645-a283-cc60e0b34d9d" />
+
+
+### Thread-Level Pipeline
+
+<img width="545" height="423" alt="Screenshot 2025-12-08 230219" src="https://github.com/user-attachments/assets/1578a20a-a6b1-4d32-b787-d09c8024042a" />
+
+
 Our system follows a three-stage pipeline:
 
 ```

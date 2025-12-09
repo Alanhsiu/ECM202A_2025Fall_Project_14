@@ -54,8 +54,8 @@ Our objective is to build an adaptive gesture recognition system that:
 
 Current approaches to multimodal gesture recognition include:
 
-- **Fixed Fusion Networks** [Wang20, Liu21]: Concatenate or average features from both modalities with equal weighting. Limitation: Cannot adapt to varying input quality.
-- **Attention-based Fusion** [Vaswani17, Chen22]: Learn attention weights for modality fusion. Limitation: Attention is learned statically and doesn't respond to runtime corruption.
+- **Fixed Fusion Networks** [Li16, Li18]: Concatenate or average features from both modalities with equal weighting. Limitation: Cannot adapt to varying input quality.
+- **Attention-based Fusion** [Panda21]: Learn attention weights for modality fusion. Limitation: Attention is learned statically and doesn't respond to runtime corruption.
 - **Early Exit Networks** [Teerapittayanon16]: Allow dynamic computation depth but typically for single modalities.
 - **Mixture of Experts** [Shazeer17]: Route inputs to specialized sub-networks. Limitation: High parameter overhead and complex training.
 
@@ -108,17 +108,17 @@ The main challenges we addressed:
 
 # **2. Related Work**
 
-## Multimodal Fusion for Gesture Recognition
+## Multimodal Fusion
 
-**[Wang20]** proposed RGB-D fusion networks using dual-stream CNNs with late fusion. While effective for clean data, performance degrades significantly when one modality is corrupted. Our approach addresses this with dynamic allocation.
+**[Li16]** proposed RGB-D fusion networks using dual-stream CNNs with late fusion. While effective on clean RGB-D inputs, the method does not consider scenarios where one modality becomes unreliable. Our approach addresses this with dynamic allocation.
 
-**[Liu21]** introduced cross-modal attention for RGB-D action recognition, allowing the model to weight modalities differently. However, these weights are learned statically and cannot adapt to runtime input quality variations.
+**[Li18]** proposed a cross-modal attentional framework for RGB-D object detection. However, their fusion relies on feature concatenation, which implies static feature weighting that cannot adapt to runtime input quality variations.
 
 ## Adaptive Neural Networks
 
 **[Teerapittayanon16]** developed BranchyNet for early exit in CNNs, reducing computation for "easy" samples. This inspired our layer-wise allocation but extends it to the multimodal setting.
 
-**[Wu22]** proposed AdaFuse for adaptive multimodal fusion in video understanding, dynamically selecting which modalities to use per frame. Our work extends this by allocating computational depth within each modality.
+**[Meng21]** proposed AdaFuse for adaptive temporal fusion in video understanding, dynamically selecting which feature channels to compute or reuse. Our work extends this by allocating computational depth within each modality.
 
 ## Vision Transformers and Efficiency
 
@@ -137,6 +137,8 @@ The main challenges we addressed:
 ## Discrete Optimization in Neural Networks
 
 **[Jang17]** introduced Gumbel-Softmax for differentiable sampling from categorical distributions. We use this for our layer allocation decisions.
+
+**[Madison17]** proposed the Concrete distribution (concurrently introduced as Gumbel-Softmax by [Jang17]) to facilitate differentiable sampling from categorical distributions.
 
 **[Bengio13]** analyzed the Straight-Through Estimator for training networks with discrete components. This is critical for gradient flow through our allocation module.
 
@@ -525,7 +527,7 @@ The key insight is that quality-aware dynamic allocation can match fixed-allocat
 
 [Bengio13] Y. Bengio, N. Léonard, and A. Courville, "Estimating or propagating gradients through stochastic neurons for conditional computation," arXiv preprint arXiv:1308.3432, 2013.
 
-[Chen22] J. Chen et al., "Cross-modal attention for multimodal gesture recognition," IEEE CVPR, 2022.
+[Panda21] R. Panda, C. Chen, Q. Fan et al., "AdaMML:Adaptive multi-modal learning for efficient video recognition," arXiv:2105.05165, 2021.
 
 [Dosovitskiy21] A. Dosovitskiy et al., "An image is worth 16x16 words: Transformers for image recognition at scale," ICLR, 2021.
 
@@ -537,17 +539,17 @@ The key insight is that quality-aware dynamic allocation can match fixed-allocat
 
 [Jang17] E. Jang, S. Gu, and B. Poole, "Categorical reparameterization with gumbel-softmax," ICLR, 2017.
 
-[Liu21] Z. Liu et al., "RGB-D action recognition with multi-stream fusion," Pattern Recognition, 2021.
+[Li18] G. Li et al., "Cross-modal attentional context learning for RGB-D object detection," arXiv:1810.12829, 2018.
 
 [Shazeer17] N. Shazeer et al., "Outrageously large neural networks: The sparsely-gated mixture-of-experts layer," ICLR, 2017.
 
 [Teerapittayanon16] S. Teerapittayanon et al., "BranchyNet: Fast inference via early exiting from deep neural networks," ICPR, 2016.
 
-[Vaswani17] A. Vaswani et al., "Attention is all you need," NeurIPS, 2017.
+[Li16] Y. Li et al., "Large-scale gesture recognition with a fusion of RGB-D data based on the C3D model," ICPR, 2016.
 
-[Wang20] L. Wang et al., "RGB-D gesture recognition using deep learning," IEEE TMM, 2020.
+[Meng21] Y. Meng et al., "AdaFuse: Adaptive temporal fusion network for efficient action recognition," arXiv:2102.05775, 2021.
 
-[Wu22] C. Wu et al., "AdaFuse: Adaptive temporal fusion for video understanding," ICCV, 2021.
+[Madison17] C. Maddison et al., "The concrete distribution: A continuous relaxation of discrete random variables," arXiv:1611.00712 , 2017.
 
 [Wu25] J. Wu et al., "A layer-wise adaptive multimodal network for dynamic input noise and compute resources," arXiv:2502.07862, 2025.
 

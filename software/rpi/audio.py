@@ -4,33 +4,37 @@ import queue
 import sys
 import threading
 import numpy as np
-import cv2
 import pyaudio
 import time
+import multiprocessing as mp
+import torch
+
 from ui import ui_generate
 from stage2_inference_and_performance import camera
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import psutil
-from collections import deque
+from stage2_inference import inference_init
+
+
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ---- Shared Events ----
-low_light_event = threading.Event()
-camera_event = threading.Event()
-camera_ready = threading.Event()
-stop_event    = threading.Event()   
+# ---- Process Shared Events ----
+
+stop_event    = mp.Event()   
+camera_ready = mp.Event()
+camera_event  = mp.Event()
+model_ready  = mp.Event()
+
+inference_start = mp.Event()
+inference_ended = mp.Event()
+
+result_queue = mp.Queue()
+log_queue = mp.Queue() 
+
+num_slots = 2
+SHAPE = (480, 640, 3)
+DTYPE = np.uint8
 
 
-shared_lock   = threading.Lock()
-shared_state  = {
-    "frame": None,      # camera thread write / UI thread read (np.ndarray, shape 480x1280x3)
-    "layer_rgb": None,
-    "layer_depth":None,
-    "last_result": None # dict: {"pred": ..., "rgb": ..., "depth": ..., "latency": ..., "cpu": ...}
-}
-
-log_queue = queue.Queue() 
 
 # --- Audio Settings ---
 AUDIO_THRESHOLD = 3500
@@ -52,6 +56,7 @@ def get_audio_rms(stream):
 
 # ---- Audio Listener Thread ----
 def audio_listener():
+    os.sched_setaffinity(0, {2})
     p = pyaudio.PyAudio()
     stream = p.open(
         format=FORMAT, 
@@ -61,7 +66,8 @@ def audio_listener():
         frames_per_buffer=CHUNK
     )
     camera_ready.wait()
-    log_queue.put('Camera is ready')
+    model_ready.wait()
+
     audio_start_time = time.time()-TOGGLE_COOLDOWN
     try:
         while True:
@@ -70,14 +76,14 @@ def audio_listener():
             current_rms = get_audio_rms(stream)
             if(current_rms > AUDIO_THRESHOLD):
                 if(time.time() - audio_start_time < TOGGLE_COOLDOWN): #  Avoid rapid toggling
-                    log_queue.put("NOT YET")
+                    log_queue.put("[Audio] NOT YET")
                     continue
                 elif not camera_event.is_set():
-                    log_queue.put("Audio trigger detected: START camera")
+                    log_queue.put("[Audio] Audio trigger detected: START camera")
                     camera_event.set()
                     audio_start_time = time.time()
                 else:
-                    log_queue.put("Audio trigger detected: STOP camera")    
+                    log_queue.put("[Audio] Audio trigger detected: STOP camera")    
                     camera_event.clear()
                     audio_start_time = time.time()
     finally:
@@ -85,23 +91,56 @@ def audio_listener():
         stream.close()
         p.terminate()
 
-# ---- Main ----
-def main(args):
-    t_camera = threading.Thread(target=camera, args=(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args), daemon=True)
-    t_audio = threading.Thread(target=audio_listener, daemon=True)
-    t_ui = threading.Thread(target=ui_generate, args=(camera_event, stop_event, low_light_event, shared_state, shared_lock, log_queue), daemon=True)
+def ui_display(shm_name, shape, dtype_str, num_slots, inference_start, inference_ended, result_queue, log_queue, shared_lock, shared_state):
+    os.sched_setaffinity(0, {0})
+    low_light_event = threading.Event()
+    shared_lock   = threading.Lock()
+    shared_state  = {
+        "frame": None,      # camera thread write / UI thread read (np.ndarray, shape 480x1280x3)
+        "layer_rgb": None,
+        "layer_depth":None,
+        "last_result": None # dict: {"pred": ..., "rgb": ..., "depth": ..., "latency": ...}
+    }
+
+    t_camera = threading.Thread(target=camera, args=(shm_name, shape, dtype_str, num_slots,inference_start, inference_ended, result_queue, stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args), daemon=True)
+    t_ui = threading.Thread(target=ui_generate, args=(stop_event, shared_lock, shared_state, log_queue), daemon=True)
     
     t_camera.start()
-    t_audio.start()
     t_ui.start()
-
-    # cpu = cpu_usage()
-    # cpu.start()
-
+    
     t_camera.join()
-    t_audio.join()
     t_ui.join()
     
+
+# ---- Main ----
+def main(args):
+    mp.set_start_method("spawn", force=True)
+
+    nbytes = num_slots * np.prod(SHAPE) * np.dtype(DTYPE).itemsize
+    shm = mp.shared_memory.SharedMemory(create=True, size=nbytes)
+
+    big_arr = np.ndarray((num_slots, *SHAPE), dtype=DTYPE, buffer=shm.buf) # (2*3*224*224)
+
+    rgb_layer = big_arr[0]   
+    depth_layer = big_arr[1]
+
+    rgb_layer[:] = 0
+    depth_layer[:] = 0
+    dtype_str = str(DTYPE)
+    shm_name = shm.name
+
+    p_inference = mp.Process(target=inference_init, args=(shm_name, SHAPE, dtype_str, num_slots, result_queue, inference_start, inference_ended, model_ready, stop_event, log_queue, args), daemon=True)
+    p_audio = mp.Process(target=audio_listener, daemon=True)
+    p_ui = mp.Process(target=ui_display, args=(shm_name, SHAPE, dtype_str, num_slots,inference_start,inference_ended,result_queue, log_queue), daemon=True)
+    
+    p_inference.start()
+    p_audio.start()
+    p_ui.start()
+
+
+    p_audio.join()
+    p_ui.join()
+    p_inference.join()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Stage 2 Adaptive Controller Inference')

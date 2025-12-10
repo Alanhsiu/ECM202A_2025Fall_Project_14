@@ -18,7 +18,7 @@
 
 ## 📝 **Abstract**
 
-This project implements an **Adaptive Multimodal Deep Network (ADMN)** for robust gesture recognition using RGB-D data in real-world scenarios with varying data quality. Traditional multimodal systems allocate fixed computational resources regardless of input quality, leading to inefficiency when one modality is corrupted. Our system intelligently allocates computational resources across RGB and Depth modalities based on input quality assessment, achieving **99.17% accuracy** with a 12-layer adaptive budget while using only half the layers of a fixed 24-layer baseline. We successfully deployed the model on a **Raspberry Pi 5** for real-time edge inference, demonstrating practical applicability for embedded gesture recognition systems.
+This project implements an **Adaptive Multimodal Deep Network (ADMN)** for robust gesture recognition using RGB-D data in real-world scenarios with varying data quality. Traditional multimodal systems allocate fixed computational resources regardless of input quality, leading to inefficiency when one modality is corrupted. Our system intelligently allocates computational resources across RGB and Depth modalities based on input quality assessment, achieving **100% accuracy** with a 12-layer adaptive budget while using only half the layers of a fixed 24-layer baseline. We successfully deployed the model on a **Raspberry Pi 5** for real-time edge inference, demonstrating practical applicability for embedded gesture recognition systems.
 
 ---
 
@@ -98,7 +98,7 @@ The main challenges we addressed:
 
 | Metric | Target | Achieved |
 |--------|--------|----------|
-| Overall Accuracy | ≥95% | ✅ 99.17% (12L) |
+| Overall Accuracy | ≥95% | ✅ 100.00% (12L) |
 | Accuracy under Corruption | ≥90% per type | ✅ 100% clean, 100% depth-occ, 97.5% low-light |
 | Adaptive Allocation | Learn corruption-aware patterns | ✅ 11:1 RGB on occlusion, 1:11 Depth on low-light |
 | Edge Latency | <1 second per frame | ✅ 727ms (12L), 521ms (8L) |
@@ -398,9 +398,9 @@ where:
 | Total Layers | GFLOPs | Avg Latency (ms) | Accuracy |
 |--------------|--------|------------------|----------|
 | 4 | 2.11 | 294 | 37.50% |
-| 6 | 3.04 | 377 | 65.83% |
-| 8 | 3.97 | 521 | 95.83% |
-| 12 | 5.84 | 727 | 99.17% |
+| 6 | 3.04 | 377 | 80.00% |
+| 8 | 3.97 | 521 | 98.33% |
+| 12 | 5.84 | 727 | 100.00% |
 | 24 (baseline) | 11.43 | 1201 | 100.00% |
 
 ## **3.5 Key Design Decisions & Rationale**
@@ -424,9 +424,9 @@ where:
 | Model | Total Layers | Best Val Acc | Test Acc | Notes |
 |-------|--------------|--------------|----------|-------|
 | Stage 1 (Upper Bound) | 24 (12+12) | 100.00% | 100.00% | Fixed allocation |
-| Stage 2 Adaptive | 12 | 99.17% | 99.17% | Quality-aware |
-| Stage 2 Adaptive | 8 | 95.83% | 95.83% | Budget-efficient |
-| Stage 2 Adaptive | 6 | 65.83% | 65.83% | Degraded |
+| Stage 2 Adaptive | 12 | 100.00% | 100.00% | Quality-aware |
+| Stage 2 Adaptive | 8 | 98.33% | 98.33% | Budget-efficient |
+| Stage 2 Adaptive | 6 | 80.00% | 80.00% | Mid-budget |
 | Stage 2 Adaptive | 4 | 37.50% | 37.50% | Too constrained |
 
 ## Adaptive Allocation Behavior
@@ -435,9 +435,9 @@ The controller learned strong corruption-aware allocation patterns:
 
 | Corruption Type | RGB Layers | Depth Layers | Strategy |
 |----------------|------------|--------------|----------|
-| **Clean** | 11 / 12 | 1 / 12 | Favor RGB (higher quality) |
-| **Depth Occluded** | 11 / 12 | 1 / 12 | Allocate to RGB 🔴 |
-| **Low Light** | 1 / 12 | 11 / 12 | Allocate to Depth 🔵 |
+| **Clean** | 6.1 / 12 | 5.9 / 12 | Nearly balanced |
+| **Depth Occluded** | 7.5 / 12 | 4.5 / 12 | Favor RGB 🔴 |
+| **Low Light** | 2.0 / 12 | 10.0 / 12 | Favor Depth 🔵 |
 
 ## Fixed Allocation Baselines (12 layers total)
 
@@ -446,7 +446,7 @@ The controller learned strong corruption-aware allocation patterns:
 | 12 / 0 (RGB only) | 92.50% | 95.0% | 100.0% | 82.5% |
 | 0 / 12 (Depth only) | 85.83% | 97.5% | 60.0% | 100.0% |
 | 6 / 6 (Uniform) | 73.33% | 87.5% | 72.5% | 60.0% |
-| **Dynamic (Ours)** | **99.17%** | 100.0% | 100.0% | 97.5% |
+| **Dynamic (Ours)** | **100.00%** | 100.0% | 100.0% | 100.0% |
 
 ## Visualization Results
 
@@ -524,7 +524,7 @@ The controller learned strong corruption-aware allocation patterns:
 
 We successfully implemented an Adaptive Multimodal Deep Network for RGB-D gesture recognition that:
 
-- Achieves **99.17% accuracy** with dynamic 12-layer allocation (vs 100% with fixed 24 layers)
+- Achieves **100% accuracy** with dynamic 12-layer allocation (vs 100% with fixed 24 layers)
 - Learns **corruption-aware allocation** patterns (11:1 ratios favoring the reliable modality)
 - Enables **50% computational reduction** compared to the baseline
 - Deploys on **Raspberry Pi 5** with practical latency (521-727ms for 8-12 layers)

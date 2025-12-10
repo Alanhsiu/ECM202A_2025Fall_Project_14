@@ -12,7 +12,7 @@
 
 ## 📖 Overview
 
-This project implements an **Adaptive Multimodal Deep Network (ADMN)** for robust gesture recognition using RGB-D data. The system dynamically allocates computational resources across RGB and Depth modalities based on input quality, achieving **99.17% accuracy** while using only half the layers of a fixed baseline.
+This project implements an **Adaptive Multimodal Deep Network (ADMN)** for robust gesture recognition using RGB-D data. The system dynamically allocates computational resources across RGB and Depth modalities based on input quality, achieving **100% accuracy** with the 12-layer adaptive budget while using only half the layers of a fixed 24-layer baseline.
 
 ### Key Features
 
@@ -267,8 +267,8 @@ python3 software/scripts/realtime_inference.py \
 
 | Total Layers | GFLOPs | Latency (ms) | Accuracy |
 |--------------|--------|--------------|----------|
-| 8 | 3.97 | 521 | 95.83% |
-| 12 | 5.84 | 727 | 99.17% |
+| 8 | 3.97 | 521 | 98.33% |
+| 12 | 5.84 | 727 | 100.00% |
 | 24 (baseline) | 11.43 | 1201 | 100.00% |
 
 ---
@@ -278,16 +278,18 @@ python3 software/scripts/realtime_inference.py \
 | Model | Layers | Accuracy |
 |-------|--------|----------|
 | Stage 1 (Upper Bound) | 24 | 100.00% |
-| Stage 2 Adaptive | 12 | 99.17% |
-| Stage 2 Adaptive | 8 | 95.83% |
+| Stage 2 Adaptive | 12 | 100.00% |
+| Stage 2 Adaptive | 8 | 98.33% |
+| Stage 2 Adaptive | 6 | 80.00% |
+| Stage 2 Adaptive | 4 | 37.50% |
 
 ### Learned Allocation Patterns
 
 | Corruption | RGB Layers | Depth Layers |
 |------------|------------|--------------|
-| Clean | 11 | 1 |
-| Depth Occluded | 11 | 1 |
-| Low Light | 1 | 11 |
+| Clean | 6.1 | 5.9 |
+| Depth Occluded | 7.5 | 4.5 |
+| Low Light | 2.0 | 10.0 |
 
 > For detailed results and analysis, see the [full report](https://alanhsiu.github.io/ECM202A_2025Fall_Project_14/).
 

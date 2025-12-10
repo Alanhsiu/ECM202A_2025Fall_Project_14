@@ -13,7 +13,7 @@ from pathlib import Path
 # Set style for better-looking plots
 plt.style.use("seaborn-v0_8-darkgrid")
 plt.rcParams["figure.figsize"] = (16, 12)
-plt.rcParams["font.size"] = 18  # Large font size for presentations
+plt.rcParams["font.size"] = 36  # Extra large font size for presentations
 
 # Define distinct colors for different elements (per user preference)
 COLORS = {
@@ -97,16 +97,17 @@ def plot_overall_accuracy(data, ax):
             ha="center",
             va="bottom",
             fontweight="bold",
-            fontsize=16,
+            fontsize=32,
         )
 
-    ax.set_ylabel("Test Accuracy (%)", fontweight="bold", fontsize=22)
+    ax.set_ylabel("Test Accuracy (%)", fontweight="bold", fontsize=44)
     ax.set_title(
-        "Overall Test Accuracy Comparison", fontweight="bold", fontsize=26, pad=20
+        "Overall Test Accuracy Comparison", fontweight="bold", fontsize=52, pad=30
     )
     ax.set_ylim([0, 105])
     ax.grid(axis="y", alpha=0.3)
-    ax.tick_params(axis="x", rotation=0, labelsize=16)
+    ax.tick_params(axis="x", rotation=0, labelsize=32)
+    ax.tick_params(axis="y", labelsize=28)
 
 
 def plot_per_corruption(data, ax):
@@ -169,14 +170,14 @@ def plot_per_corruption(data, ax):
             linewidth=0.8,
         )
 
-    ax.set_ylabel("Accuracy (%)", fontweight="bold", fontsize=22)
-    ax.set_title("Accuracy by Corruption Type", fontweight="bold", fontsize=26, pad=20)
+    ax.set_ylabel("Accuracy (%)", fontweight="bold", fontsize=44)
+    ax.set_title("Accuracy by Corruption Type", fontweight="bold", fontsize=52, pad=30)
     ax.set_xticks(x)
-    ax.set_xticklabels(methods, fontsize=16)
-    ax.legend(loc="lower right", fontsize=16, framealpha=0.9)
+    ax.set_xticklabels(methods, fontsize=32)
+    ax.legend(loc="lower right", fontsize=32, framealpha=0.9)
     ax.set_ylim([0, 110])
     ax.grid(axis="y", alpha=0.3)
-    ax.tick_params(axis="y", labelsize=14)
+    ax.tick_params(axis="y", labelsize=28)
 
 
 def plot_layer_budget_vs_accuracy(data, ax):
@@ -203,12 +204,12 @@ def plot_layer_budget_vs_accuracy(data, ax):
         budgets,
         accuracies,
         "o-",
-        linewidth=3,
-        markersize=10,
+        linewidth=5,
+        markersize=18,
         label="Dynamic Allocation",
         color=COLORS["dynamic_12"],
         markeredgecolor="black",
-        markeredgewidth=1.5,
+        markeredgewidth=2.5,
     )
 
     # Add value labels
@@ -216,11 +217,11 @@ def plot_layer_budget_vs_accuracy(data, ax):
         ax.annotate(
             f"{acc:.1f}%",
             xy=(b, acc),
-            xytext=(0, 12),
+            xytext=(0, 15),
             textcoords="offset points",
             ha="center",
             fontweight="bold",
-            fontsize=16,
+            fontsize=32,
         )
 
     # Plot naive allocations at 12 layers as separate markers
@@ -234,32 +235,32 @@ def plot_layer_budget_vs_accuracy(data, ax):
         ax.scatter(
             [12],
             [acc],
-            s=250,
+            s=400,
             label=label,
             color=color,
             marker=marker,
             edgecolor="black",
-            linewidth=1.5,
+            linewidth=2,
             zorder=5,
         )
         ax.annotate(
             f"{acc:.1f}%",
             xy=(12, acc),
-            xytext=(18, 0),
+            xytext=(22, 0),
             textcoords="offset points",
             ha="left",
             fontweight="bold",
-            fontsize=15,
+            fontsize=30,
         )
 
-    ax.set_xlabel("Total Layer Budget", fontweight="bold", fontsize=22)
-    ax.set_ylabel("Test Accuracy (%)", fontweight="bold", fontsize=22)
-    ax.set_title("Layer Budget vs Accuracy", fontweight="bold", fontsize=26, pad=20)
-    ax.legend(loc="lower left", fontsize=16, framealpha=0.9)
+    ax.set_xlabel("Total Layer Budget", fontweight="bold", fontsize=44)
+    ax.set_ylabel("Test Accuracy (%)", fontweight="bold", fontsize=44)
+    ax.set_title("Layer Budget vs Accuracy", fontweight="bold", fontsize=52, pad=30)
+    ax.legend(loc="lower left", fontsize=32, framealpha=0.9)
     ax.grid(True, alpha=0.3)
     ax.set_xlim([2, 26])
     ax.set_ylim([30, 100])
-    ax.tick_params(axis="both", labelsize=14)
+    ax.tick_params(axis="both", labelsize=28)
 
 
 def plot_dynamic_allocations(data, ax):
@@ -320,22 +321,22 @@ def plot_dynamic_allocations(data, ax):
                 f"{total:.1f}",
                 ha="center",
                 va="bottom",
-                fontsize=14,
+                fontsize=28,
                 fontweight="bold",
             )
 
-    ax.set_ylabel("Number of Layers", fontweight="bold", fontsize=22)
+    ax.set_ylabel("Number of Layers", fontweight="bold", fontsize=44)
     ax.set_title(
         "Dynamic Layer Allocation by Corruption Type",
         fontweight="bold",
-        fontsize=26,
-        pad=20,
+        fontsize=52,
+        pad=30,
     )
     ax.set_xticks(x)
-    ax.set_xticklabels(corruption_labels, fontsize=18)
+    ax.set_xticklabels(corruption_labels, fontsize=36)
     ax.set_ylim([0, 14])
     ax.grid(axis="y", alpha=0.3)
-    ax.tick_params(axis="y", labelsize=14)
+    ax.tick_params(axis="y", labelsize=28)
 
     # Custom legend
     rgb_patch = mpatches.Patch(
@@ -345,7 +346,7 @@ def plot_dynamic_allocations(data, ax):
         color=COLORS["depth"], label="Depth Layers", edgecolor="black"
     )
     ax.legend(
-        handles=[rgb_patch, depth_patch], loc="upper left", fontsize=16, framealpha=0.9
+        handles=[rgb_patch, depth_patch], loc="upper left", fontsize=32, framealpha=0.9
     )
 
     # Add model labels
@@ -381,8 +382,8 @@ def plot_allocation_heatmap(data, ax):
     # Set ticks and labels
     ax.set_xticks(np.arange(len(corruption_labels)))
     ax.set_yticks(np.arange(len(models)))
-    ax.set_xticklabels(corruption_labels, fontsize=16)
-    ax.set_yticklabels(models, fontsize=16)
+    ax.set_xticklabels(corruption_labels, fontsize=32)
+    ax.set_yticklabels(models, fontsize=32)
 
     # Add text annotations
     for i in range(len(models)):
@@ -395,19 +396,19 @@ def plot_allocation_heatmap(data, ax):
                 va="center",
                 color="black",
                 fontweight="bold",
-                fontsize=18,
+                fontsize=36,
             )
 
     ax.set_title(
-        "RGB Layer Allocation Ratio (%)", fontweight="bold", fontsize=26, pad=20
+        "RGB Layer Allocation Ratio (%)", fontweight="bold", fontsize=52, pad=30
     )
 
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label(
-        "RGB Ratio (%)", rotation=270, labelpad=25, fontweight="bold", fontsize=18
+        "RGB Ratio (%)", rotation=270, labelpad=35, fontweight="bold", fontsize=36
     )
-    cbar.ax.tick_params(labelsize=14)
+    cbar.ax.tick_params(labelsize=28)
 
 
 def plot_test_loss_comparison(data, ax):
@@ -457,15 +458,15 @@ def plot_test_loss_comparison(data, ax):
             ha="center",
             va="bottom",
             fontweight="bold",
-            fontsize=14,
+            fontsize=28,
         )
 
-    ax.set_ylabel("Test Loss", fontweight="bold", fontsize=22)
+    ax.set_ylabel("Test Loss", fontweight="bold", fontsize=44)
     ax.set_title(
-        "Test Loss Comparison (Lower is Better)", fontweight="bold", fontsize=26, pad=20
+        "Test Loss Comparison (Lower is Better)", fontweight="bold", fontsize=52, pad=30
     )
     ax.grid(axis="y", alpha=0.3)
-    ax.tick_params(axis="both", labelsize=14)
+    ax.tick_params(axis="both", labelsize=28)
 
 
 def save_individual_subplots(data):
@@ -474,16 +475,16 @@ def save_individual_subplots(data):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     subplot_jobs = [
-        ("baseline_overall_accuracy.png", plot_overall_accuracy, (16, 10)),
-        ("baseline_test_loss.png", plot_test_loss_comparison, (14, 9)),
-        ("baseline_per_corruption_accuracy.png", plot_per_corruption, (18, 10)),
+        ("baseline_overall_accuracy.png", plot_overall_accuracy, (28, 18)),
+        ("baseline_test_loss.png", plot_test_loss_comparison, (24, 16)),
+        ("baseline_per_corruption_accuracy.png", plot_per_corruption, (32, 18)),
         (
             "baseline_layer_budget_vs_accuracy.png",
             plot_layer_budget_vs_accuracy,
-            (16, 10),
+            (28, 18),
         ),
-        ("baseline_dynamic_allocations.png", plot_dynamic_allocations, (14, 10)),
-        ("baseline_allocation_heatmap.png", plot_allocation_heatmap, (14, 10)),
+        ("baseline_dynamic_allocations.png", plot_dynamic_allocations, (26, 18)),
+        ("baseline_allocation_heatmap.png", plot_allocation_heatmap, (26, 18)),
     ]
 
     for filename, plot_fn, figsize in subplot_jobs:
@@ -503,10 +504,10 @@ def main():
     print("Generating comparison charts...")
 
     # Create figure with subplots
-    fig = plt.figure(figsize=(28, 18))
+    fig = plt.figure(figsize=(48, 32))
 
     # Define grid
-    gs = fig.add_gridspec(3, 3, hspace=0.4, wspace=0.35)
+    gs = fig.add_gridspec(3, 3, hspace=0.5, wspace=0.4)
 
     ax1 = fig.add_subplot(gs[0, :2])  # Overall accuracy (wide)
     ax2 = fig.add_subplot(gs[0, 2])  # Test loss
@@ -526,7 +527,7 @@ def main():
     # Add overall title
     fig.suptitle(
         "ADMN-RealWorld Baseline Comparison Dashboard",
-        fontsize=30,
+        fontsize=60,
         fontweight="bold",
         y=0.98,
     )

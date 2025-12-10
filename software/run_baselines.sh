@@ -55,33 +55,33 @@ log_time() {
 # ==============================================================================
 # 1. UPPER BOUND: Stage 1 Training
 # ==============================================================================
-print_header "1. UPPER BOUND: Stage 1 Training (All 24 Layers)"
+# print_header "1. UPPER BOUND: Stage 1 Training (All 24 Layers)"
 
-STAGE1_LOG="logs/stage1_$(date +%Y%m%d_%H%M%S).log"
-echo "Log file: $STAGE1_LOG"
+# STAGE1_LOG="logs/stage1_$(date +%Y%m%d_%H%M%S).log"
+# echo "Log file: $STAGE1_LOG"
 
-start_time=$(date +%s)
-log_time "Starting Stage 1 training" | tee -a "$STAGE1_LOG"
+# start_time=$(date +%s)
+# log_time "Starting Stage 1 training" | tee -a "$STAGE1_LOG"
 
-python software/scripts/train_stage1.py \
-    --data_dir data_new \
-    --epochs 100 \
-    --batch_size 16 \
-    --lr 1e-4 \
-    --layerdrop 0.0 \
-    --weight_decay 0.0 \
-    --label_smoothing 0.0 \
-    --patience 30 \
-    --seed 42 \
-    --output_dir checkpoints/stage1 2>&1 | tee -a "$STAGE1_LOG"
+# python software/scripts/train_stage1.py \
+#     --data_dir data_new \
+#     --epochs 100 \
+#     --batch_size 16 \
+#     --lr 1e-4 \
+#     --layerdrop 0.0 \
+#     --weight_decay 0.0 \
+#     --label_smoothing 0.0 \
+#     --patience 30 \
+#     --seed 42 \
+#     --output_dir checkpoints/stage1 2>&1 | tee -a "$STAGE1_LOG"
 
-end_time=$(date +%s)
-elapsed=$((end_time - start_time))
-log_time "Stage 1 completed in ${elapsed}s" | tee -a "$STAGE1_LOG"
+# end_time=$(date +%s)
+# elapsed=$((end_time - start_time))
+# log_time "Stage 1 completed in ${elapsed}s" | tee -a "$STAGE1_LOG"
 
-# Copy results to results directory
-cp checkpoints/stage1/stage1_upper_bound.json results/baselines/
-print_success "Stage 1 (Upper Bound) completed"
+# # Copy results to results directory
+# cp checkpoints/stage1/stage1_upper_bound.json results/baselines/
+# print_success "Stage 1 (Upper Bound) completed"
 
 # ==============================================================================
 # 2. STAGE 2: Dynamic Layer Allocation (12 layers)
@@ -114,49 +114,49 @@ log_time "Stage 2 (12 layers) completed in ${elapsed}s" | tee -a "$STAGE2_LOG"
 cp checkpoints/stage2/stage2_dynamic_12layers.json results/baselines/
 print_success "Stage 2 Dynamic (12 layers) completed"
 
-# ==============================================================================
-# 3. NAIVE ALLOCATION: Fixed Layer Allocation
-# ==============================================================================
-print_header "3. NAIVE ALLOCATION: Fixed Layer Allocation Tests"
+# # ==============================================================================
+# # 3. NAIVE ALLOCATION: Fixed Layer Allocation
+# # ==============================================================================
+# print_header "3. NAIVE ALLOCATION: Fixed Layer Allocation Tests"
 
-# 3a. All RGB (12/0)
-echo "Testing Naive Allocation: RGB=12, Depth=0"
-NAIVE_LOG="logs/naive_12_0_$(date +%Y%m%d_%H%M%S).log"
+# # 3a. All RGB (12/0)
+# echo "Testing Naive Allocation: RGB=12, Depth=0"
+# NAIVE_LOG="logs/naive_12_0_$(date +%Y%m%d_%H%M%S).log"
 
-python software/scripts/train_stage2.py \
-    --stage1_checkpoint checkpoints/stage1/best_model.pth \
-    --data_dir data_new \
-    --naive_allocation "12,0" \
-    --seed 42 \
-    --output_dir results/baselines 2>&1 | tee -a "$NAIVE_LOG"
+# python software/scripts/train_stage2.py \
+#     --stage1_checkpoint checkpoints/stage1/best_model.pth \
+#     --data_dir data_new \
+#     --naive_allocation "12,0" \
+#     --seed 42 \
+#     --output_dir results/baselines 2>&1 | tee -a "$NAIVE_LOG"
 
-print_success "Naive (12/0) completed"
+# print_success "Naive (12/0) completed"
 
-# 3b. All Depth (0/12)
-echo "Testing Naive Allocation: RGB=0, Depth=12"
-NAIVE_LOG="logs/naive_0_12_$(date +%Y%m%d_%H%M%S).log"
+# # 3b. All Depth (0/12)
+# echo "Testing Naive Allocation: RGB=0, Depth=12"
+# NAIVE_LOG="logs/naive_0_12_$(date +%Y%m%d_%H%M%S).log"
 
-python software/scripts/train_stage2.py \
-    --stage1_checkpoint checkpoints/stage1/best_model.pth \
-    --data_dir data_new \
-    --naive_allocation "0,12" \
-    --seed 42 \
-    --output_dir results/baselines 2>&1 | tee -a "$NAIVE_LOG"
+# python software/scripts/train_stage2.py \
+#     --stage1_checkpoint checkpoints/stage1/best_model.pth \
+#     --data_dir data_new \
+#     --naive_allocation "0,12" \
+#     --seed 42 \
+#     --output_dir results/baselines 2>&1 | tee -a "$NAIVE_LOG"
 
-print_success "Naive (0/12) completed"
+# print_success "Naive (0/12) completed"
 
-# 3c. Each Half (6/6)
-echo "Testing Naive Allocation: RGB=6, Depth=6"
-NAIVE_LOG="logs/naive_6_6_$(date +%Y%m%d_%H%M%S).log"
+# # 3c. Each Half (6/6)
+# echo "Testing Naive Allocation: RGB=6, Depth=6"
+# NAIVE_LOG="logs/naive_6_6_$(date +%Y%m%d_%H%M%S).log"
 
-python software/scripts/train_stage2.py \
-    --stage1_checkpoint checkpoints/stage1/best_model.pth \
-    --data_dir data_new \
-    --naive_allocation "6,6" \
-    --seed 42 \
-    --output_dir results/baselines 2>&1 | tee -a "$NAIVE_LOG"
+# python software/scripts/train_stage2.py \
+#     --stage1_checkpoint checkpoints/stage1/best_model.pth \
+#     --data_dir data_new \
+#     --naive_allocation "6,6" \
+#     --seed 42 \
+#     --output_dir results/baselines 2>&1 | tee -a "$NAIVE_LOG"
 
-print_success "Naive (6/6) completed"
+# print_success "Naive (6/6) completed"
 
 # ==============================================================================
 # 4. REDUCED LAYER BUDGET: 4, 6, 8 layers

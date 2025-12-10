@@ -17,7 +17,15 @@ import numpy as np
 from PIL import Image
 from sklearn.model_selection import train_test_split
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ensure repo root is on PYTHONPATH (needed when script is invoked from repo root)
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+# Also keep `software` on path for any relative imports that rely on it
+SOFTWARE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if SOFTWARE_DIR not in sys.path:
+    sys.path.insert(0, SOFTWARE_DIR)
 
 from models.adaptive_controller import AdaptiveGestureClassifier
 from data.gesture_dataset import rgb_transform, depth_transform
@@ -377,6 +385,10 @@ def validate(model, dataloader, criterion, device, temperature=1.0, alpha=1.0, b
     correct = 0
     total = 0
     
+    # Track per-corruption accuracy
+    corruption_correct = {'clean': 0, 'depth_occluded': 0, 'low_light': 0}
+    corruption_total = {'clean': 0, 'depth_occluded': 0, 'low_light': 0}
+    
     # Track allocation statistics
     allocation_stats = {
         'clean': {'rgb': [], 'depth': []},
@@ -426,11 +438,23 @@ def validate(model, dataloader, criterion, device, temperature=1.0, alpha=1.0, b
                 
                 allocation_stats[corr_type]['rgb'].append(rgb_count)
                 allocation_stats[corr_type]['depth'].append(depth_count)
+                
+                corruption_total[corr_type] += 1
+                if predicted[i] == labels[i]:
+                    corruption_correct[corr_type] += 1
     
     avg_loss = total_loss / len(dataloader)
     avg_cls_loss = total_cls_loss / len(dataloader)
     avg_alloc_loss = total_alloc_loss / len(dataloader)
     accuracy = 100 * correct / total
+    
+    # Per-corruption accuracy
+    corruption_acc = {}
+    for corr_type in ['clean', 'depth_occluded', 'low_light']:
+        if corruption_total[corr_type] > 0:
+            corruption_acc[corr_type] = 100 * corruption_correct[corr_type] / corruption_total[corr_type]
+        else:
+            corruption_acc[corr_type] = 0.0
     
     # Compute average allocations
     avg_allocations = {}
@@ -441,7 +465,7 @@ def validate(model, dataloader, criterion, device, temperature=1.0, alpha=1.0, b
                 'depth': np.mean(allocation_stats[corr_type]['depth'])
             }
     
-    return avg_loss, avg_cls_loss, avg_alloc_loss, accuracy, avg_allocations
+    return avg_loss, avg_cls_loss, avg_alloc_loss, accuracy, corruption_acc, avg_allocations
 
 def validate_naive(model, dataloader, criterion, device, rgb_layers, depth_layers):
     """
@@ -723,7 +747,7 @@ def main(args):
         )
         
         # Validate
-        val_loss, val_cls, val_alloc, val_acc, allocations = validate(
+        val_loss, val_cls, val_alloc, val_acc, _, allocations = validate(
             model, val_loader, criterion, device, temperature,
             alpha=args.alpha, beta=args.beta
         )
@@ -776,7 +800,7 @@ def main(args):
     model.load_state_dict(best_checkpoint['model_state_dict'])
     
     # Test evaluation
-    test_loss, test_cls, test_alloc, test_acc, test_allocations = validate(
+    test_loss, test_cls, test_alloc, test_acc, test_corruption_acc, test_allocations = validate(
         model, test_loader, criterion, device, temperature=0.5,
         alpha=args.alpha, beta=args.beta
     )
@@ -786,6 +810,9 @@ def main(args):
     print(f"  Allocations:")
     for corr_type, alloc in test_allocations.items():
         print(f"    {corr_type:15s}: RGB {alloc['rgb']:.1f} | Depth {alloc['depth']:.1f}")
+    print(f"  Per-corruption Accuracy:")
+    for corr_type, acc in test_corruption_acc.items():
+        print(f"    {corr_type:15s}: {acc:.2f}%")
     
     print("="*60)
     
@@ -802,6 +829,7 @@ def main(args):
         'best_val_accuracy': best_val_acc,
         'test_accuracy': test_acc,
         'test_loss': test_loss,
+        'per_corruption_accuracy': test_corruption_acc,
         'allocations': test_allocations,
         'hyperparameters': {
             'alpha': args.alpha,

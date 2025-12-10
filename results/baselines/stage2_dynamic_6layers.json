@@ -1,13 +1,18 @@
 {
   "mode": "dynamic_allocation",
   "total_layers": 6,
-  "best_val_accuracy": 65.83333333333333,
-  "test_accuracy": 65.83333333333333,
-  "test_loss": 0.977214440703392,
+  "best_val_accuracy": 80.0,
+  "test_accuracy": 80.0,
+  "test_loss": 0.9768908023834229,
+  "per_corruption_accuracy": {
+    "clean": 82.5,
+    "depth_occluded": 92.5,
+    "low_light": 65.0
+  },
   "allocations": {
     "clean": {
-      "rgb": 4.325,
-      "depth": 1.675
+      "rgb": 4.9,
+      "depth": 1.1
     },
     "depth_occluded": {
       "rgb": 5.0,

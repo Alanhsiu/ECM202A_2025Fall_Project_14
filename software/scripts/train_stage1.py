@@ -16,8 +16,15 @@ import random
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-# Add project root to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ensure repo root is on PYTHONPATH (needed when script is invoked from repo root)
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+# Also keep `software` on path for any relative imports that rely on it
+SOFTWARE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if SOFTWARE_DIR not in sys.path:
+    sys.path.insert(0, SOFTWARE_DIR)
 
 from models.gesture_classifier import GestureClassifier
 from data.gesture_dataset import rgb_transform, depth_transform

@@ -3,7 +3,12 @@
   "total_layers": 4,
   "best_val_accuracy": 37.5,
   "test_accuracy": 37.5,
-  "test_loss": 1.847043514251709,
+  "test_loss": 1.8470434546470642,
+  "per_corruption_accuracy": {
+    "clean": 47.5,
+    "depth_occluded": 37.5,
+    "low_light": 27.5
+  },
   "allocations": {
     "clean": {
       "rgb": 2.95,

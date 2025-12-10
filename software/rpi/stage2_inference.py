@@ -6,6 +6,7 @@ import pyrealsense2 as rs
 import cv2
 from time import time
 import multiprocessing as mp
+from multiprocessing import shared_memory
 from collections import Counter
 from fvcore.nn import FlopCountAnalysis
 
@@ -125,7 +126,7 @@ def inference_stage2(model, data, device, temperature=0.5):
 
 def inference_loop(shm_name, shape, dtype_str, num_slots, result_queue, inference_start, inference_ended, stop_event, model=None, device=None, args=None):
     dtype = np.dtype(dtype_str)
-    shm = mp.shared_memory.SharedMemory(name=shm_name)
+    shm = shared_memory.SharedMemory(name=shm_name)
     big_arr = np.ndarray((num_slots, *shape), dtype=dtype, buffer=shm.buf)
 
     rgb_target = big_arr[0]

@@ -2,7 +2,6 @@ import os
 import sys
 import torch
 from tqdm import tqdm
-import argparse
 import numpy as np
 import pyrealsense2 as rs
 import cv2
@@ -11,7 +10,7 @@ from gpiozero import LED
 from collections import Counter
 from fvcore.nn import FlopCountAnalysis
 import multiprocessing as mp
-
+from multiprocessing import shared_memory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class_names = ['standing', 'left_hand', 'right_hand', 'both_hands']
@@ -69,10 +68,10 @@ def reset_gpio():
     if led_5: led_5.off()
     
 
-def camera(shm_name, shape, dtype_str, num_slots,inference_start, inference_ended,result_queue,stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args):
+def camera(shm_name, shape, dtype_str, num_slots,inference_start, inference_ended,result_queue,stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue):
     # shared memory setup (w/ inference process)
     dtype = np.dtype(dtype_str)
-    shm = mp.shared_memory.SharedMemory(name=shm_name)
+    shm = shared_memory.SharedMemory(name=shm_name)
     big_arr = np.ndarray((num_slots, *shape), dtype=dtype, buffer=shm.buf)
 
     rgb_target   = big_arr[0]

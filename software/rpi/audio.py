@@ -7,10 +7,11 @@ import numpy as np
 import pyaudio
 import time
 import multiprocessing as mp
+from multiprocessing import shared_memory
 import torch
 
 from ui import ui_generate
-from stage2_inference_and_performance import camera
+from camera import camera
 from stage2_inference import inference_init
 
 
@@ -91,7 +92,7 @@ def audio_listener():
         stream.close()
         p.terminate()
 
-def ui_display(shm_name, shape, dtype_str, num_slots, inference_start, inference_ended, result_queue, log_queue, shared_lock, shared_state):
+def ui_display(shm_name, shape, dtype_str, num_slots, inference_start, inference_ended, result_queue, log_queue):
     os.sched_setaffinity(0, {0})
     low_light_event = threading.Event()
     shared_lock   = threading.Lock()
@@ -102,8 +103,8 @@ def ui_display(shm_name, shape, dtype_str, num_slots, inference_start, inference
         "last_result": None # dict: {"pred": ..., "rgb": ..., "depth": ..., "latency": ...}
     }
 
-    t_camera = threading.Thread(target=camera, args=(shm_name, shape, dtype_str, num_slots,inference_start, inference_ended, result_queue, stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args), daemon=True)
-    t_ui = threading.Thread(target=ui_generate, args=(stop_event, shared_lock, shared_state, log_queue), daemon=True)
+    t_camera = threading.Thread(target=camera, args=(shm_name, shape, dtype_str, num_slots,inference_start, inference_ended, result_queue, stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue), daemon=True)
+    t_ui = threading.Thread(target=ui_generate, args=(camera_event, stop_event, low_light_event, shared_state, shared_lock, log_queue), daemon=True)
     
     t_camera.start()
     t_ui.start()
@@ -117,7 +118,7 @@ def main(args):
     mp.set_start_method("spawn", force=True)
 
     nbytes = num_slots * np.prod(SHAPE) * np.dtype(DTYPE).itemsize
-    shm = mp.shared_memory.SharedMemory(create=True, size=nbytes)
+    shm = shared_memory.SharedMemory(create=True, size=nbytes)
 
     big_arr = np.ndarray((num_slots, *SHAPE), dtype=DTYPE, buffer=shm.buf) # (2*3*224*224)
 
@@ -126,7 +127,7 @@ def main(args):
 
     rgb_layer[:] = 0
     depth_layer[:] = 0
-    dtype_str = str(DTYPE)
+    dtype_str = np.dtype(DTYPE).name
     shm_name = shm.name
 
     p_inference = mp.Process(target=inference_init, args=(shm_name, SHAPE, dtype_str, num_slots, result_queue, inference_start, inference_ended, model_ready, stop_event, log_queue, args), daemon=True)

@@ -258,7 +258,7 @@ def ui_generate(camera_event, stop_event, low_light_event, shared_state, shared_
             cv2.addWeighted(overlay, 0.6, final_display, 0.4, 0, final_display)
             cv2.putText( final_display, text, (20, 28),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        scale = 0.7  
+        scale = 2
         display_small = cv2.resize(final_display, None, fx=scale, fy=scale)
         cv2.imshow("ADMN Dashboard", display_small)
         key = cv2.waitKey(30) & 0xFF

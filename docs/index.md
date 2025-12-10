@@ -31,7 +31,7 @@ This project implements an **Adaptive Multimodal Deep Network (ADMN)** for robus
 
 ## 🎛️ **Media**
 
-- [Demo Video: Real-time Gesture Recognition on Raspberry Pi 5](assets/media/demo_video.mp4)
+- [Demo Video: Real-time Gesture Recognition on Raspberry Pi 5](https://youtu.be/8QYfPcGmBG4?si=D_h5VeKa-E8GkjzE)
 
 ---
 

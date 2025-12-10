@@ -512,13 +512,19 @@ The controller learned strong corruption-aware allocation patterns:
 
 1. **Expand to More Gestures**: Scale to larger gesture vocabularies (20+ classes)
 
-2. **Additional Corruptions**: Test robustness to motion blur, depth noise, partial occlusions
+2. **Voice Recognition Integration**: Incorporate on-device voice-triggered commands
 
-3. **Model Compression**: Apply quantization (INT8) and pruning for faster edge inference
+3. **Migration to Smaller Hardware**: Deploy on MCUs or ultra-low-cost embedded platforms
 
-4. **Online Adaptation**: Enable the controller to adapt during deployment without retraining
+4. **Additional Corruptions**: Test robustness to motion blur, depth noise, partial occlusions
 
-5. **Multi-Task Learning**: Extend to simultaneous gesture recognition and pose estimation
+5. **Model Compression**: Apply quantization (INT8) and pruning for faster edge inference
+
+6. **Online Adaptation**: Enable the controller to adapt during deployment without retraining
+
+7. **Multi-Task Learning**: Extend to simultaneous gesture recognition and pose estimation
+
+
 
 ## Conclusions
 

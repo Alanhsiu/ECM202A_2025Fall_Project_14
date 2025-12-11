@@ -45,6 +45,17 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 
+# clear flash
+
+def flush_stream(stream, duration=0.2):
+    frames = int(duration * RATE / CHUNK)
+    for _ in range(frames):
+        try:
+            stream.read(CHUNK, exception_on_overflow=False)
+        except:
+            pass
+
+
 # ---- Audio RMS Calculation ----
 def get_audio_rms(stream):
     try:
@@ -57,8 +68,10 @@ def get_audio_rms(stream):
 
 # ---- Audio Listener Thread ----
 def audio_listener():
-    os.sched_setaffinity(0, {2})
+    os.sched_setaffinity(0, {0})
     p = pyaudio.PyAudio()
+    camera_ready.wait()
+    model_ready.wait()
     stream = p.open(
         format=FORMAT, 
         channels=CHANNELS, 
@@ -66,12 +79,12 @@ def audio_listener():
         input=True,             
         frames_per_buffer=CHUNK
     )
-    camera_ready.wait()
-    model_ready.wait()
+
 
     audio_start_time = time.time()-TOGGLE_COOLDOWN
     try:
         while True:
+            flush_stream(stream, duration=0.05)
             if stop_event.is_set():
                 break
             current_rms = get_audio_rms(stream)
@@ -87,6 +100,7 @@ def audio_listener():
                     log_queue.put("[Audio] Audio trigger detected: STOP camera")    
                     camera_event.clear()
                     audio_start_time = time.time()
+        time.sleep(0.05)
     finally:
         stream.stop_stream()
         stream.close()
@@ -115,7 +129,7 @@ def ui_display(shm_name, shape, dtype_str, num_slots, inference_start, inference
 
 # ---- Main ----
 def main(args):
-    mp.set_start_method("spawn", force=True)
+    # mp.set_start_method("spawn", force=True)
 
     nbytes = num_slots * np.prod(SHAPE) * np.dtype(DTYPE).itemsize
     shm = shared_memory.SharedMemory(create=True, size=nbytes)
@@ -142,6 +156,9 @@ def main(args):
     p_audio.join()
     p_ui.join()
     p_inference.join()
+    shm.close()
+    shm.unlink()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Stage 2 Adaptive Controller Inference')

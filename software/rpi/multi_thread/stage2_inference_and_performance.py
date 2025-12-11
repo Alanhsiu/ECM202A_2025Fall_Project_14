@@ -13,7 +13,7 @@ from fvcore.nn import FlopCountAnalysis
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.adaptive_controller import AdaptiveGestureClassifier
-from data.gesture_dataset import transform_from_camera
+from gesture_dataset import transform_from_camera
 
 class_names = ['standing', 'left_hand', 'right_hand', 'both_hands']
 
@@ -89,7 +89,7 @@ def calibrate_flops_constants(model, device):
 
         print(f">>> [System] Calibration Done!")
         # print(f"    - Precise Total: {total_precise_flops/1e9:.2f} GFLOPs")
-        print(f"    - Detected {len(layer_costs)} active layers (avg cost: {avg_layer_cost/1e9:.2f} GFLOPs)")
+        # print(f"    - Detected {len(layer_costs)} active layers (avg cost: {avg_layer_cost/1e9:.2f} GFLOPs)")
         print(f"    - Calculated BASE: {G_BASE_FLOPS/1e9:.2f} GFLOPs")
         print(f"    - Calculated PER LAYER: {G_PER_LAYER_FLOPS/1e9:.2f} GFLOPs")
 
@@ -180,7 +180,7 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
     # Configure depth and color streams
     pipeline = rs.pipeline()
     config = rs.config()
-
+    # ave_latency = []
     # Enable streams (you can adjust resolution, format, and FPS as needed)
     config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
@@ -257,27 +257,32 @@ def take_pic(stop_event, camera_event, low_light_event, shared_lock, shared_stat
 
                 data = transform_from_camera(color_image, depth_colormap)
                 pred_label, rgb_layers, depth_layers, latency_ms= inference_stage2(model, data, device)
+                # ave_latency.append(latency_ms)
                 update_led(pred_label)
                 flops = conceptual_calculate_flops(
                     total_layers=args.total_layers,
                     rgb_layers_used=rgb_layers,
                     depth_layers_used=depth_layers
                 )
+                
+                lat_all = (time()-last_capture_time)*1000
                 log_queue.put(f"===> Prediction: {pred_label}")
                 log_queue.put(f"===> Used Layers - RGB: {int(rgb_layers)} Depth: {int(depth_layers)}")
                 log_queue.put(f"===> Estimated FLOPs: {flops:.2f} GFLOPs")
-                log_queue.put(f"===> Latency: {latency_ms:.1f} ms")
+                log_queue.put(f"===> Latency: {lat_all:.1f} ms")
                 log_queue.put("=========================================================")
                 with shared_lock:
                     shared_state["frame"] = combined_camera.copy()
                     shared_state["layer_rgb"] = rgb_layers
                     shared_state["layer_depth"] = depth_layers
-                    shared_state["last_result"] = f"Pred: {pred_label} | RGB: {int(rgb_layers)} | Depth: {int(depth_layers)} | {latency_ms:.1f} ms"
-        
+                    shared_state["last_result"] = f"Pred: {pred_label} | RGB: {int(rgb_layers)} | Depth: {int(depth_layers)} | {lat_all:.1f} ms"
+                        
     finally:
         if is_pipeline_active:
             pipeline.stop()
         reset_gpio()
+        # latency = sum(ave_latency)/len(ave_latency)
+        # print(f'average latency {latency:.2f} ms')
 
 def camera(stop_event, camera_event, low_light_event, camera_ready, shared_lock, shared_state, log_queue, args):
     # --- Setup and Model Loading ---

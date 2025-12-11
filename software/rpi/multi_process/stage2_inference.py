@@ -154,10 +154,15 @@ def inference_loop(shm_name, shape, dtype_str, num_slots, result_queue, inferenc
         result_queue.put({'Pred': pred_label, 'RGB': rgb_layers, 'Depth': depth_layers, 'latency_ms': latency_ms})
         inference_start.clear()
         inference_ended.set()
+    shm.close()
 
 def inference_init(shm_name, shape, dtype_str, num_slots, result_queue, inference_start, inference_ended, model_ready, stop_event, log_queue, args):
     # --- Setup and Model Loading ---
-    os.sched_setaffinity(0, {1}) # Bind to CPU 1
+    os.sched_setaffinity(0, {0,1,2,3}) # Bind to CPU 1
+    torch.set_num_threads(6)
+    torch.set_num_interop_threads(1)
+    # os.environ["OMP_NUM_THREADS"] = "3"
+    # os.environ["OPENBLAS_NUM_THREADS"] = "3"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 

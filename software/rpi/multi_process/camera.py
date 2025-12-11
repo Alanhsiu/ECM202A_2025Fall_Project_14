@@ -76,7 +76,7 @@ def camera(shm_name, shape, dtype_str, num_slots,inference_start, inference_ende
 
     rgb_target   = big_arr[0]
     depth_target = big_arr[1]
-
+    ave_latency = []
     # Configure depth and color streams
     pipeline = rs.pipeline()
     config = rs.config()
@@ -100,6 +100,7 @@ def camera(shm_name, shape, dtype_str, num_slots,inference_start, inference_ende
                     log_queue.put(">>> [Camera] Stopping Camera (Sleep Mode)...")
                     log_queue.put("=========================================================")
                     pipeline.stop()
+                    pipeline = None
                     led_5.off()
                     is_pipeline_active = False
                     reset_gpio()
@@ -113,6 +114,13 @@ def camera(shm_name, shape, dtype_str, num_slots,inference_start, inference_ende
             elif is_pipeline_active == False:
                 log_queue.put(">>> [Camera] Starting Camera...")
                 log_queue.put("=========================================================")
+                pipeline = rs.pipeline()
+                config = rs.config()
+
+                # Enable streams (you can adjust resolution, format, and FPS as needed)
+                config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+                config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+
                 profile = pipeline.start(config)
                 dd = profile.get_device()
                 color_sensor = dd.first_color_sensor() 
@@ -159,12 +167,13 @@ def camera(shm_name, shape, dtype_str, num_slots,inference_start, inference_ende
                 rgb_layers = pred_result['RGB']
                 depth_layers = pred_result['Depth']
                 latency_ms = pred_result['latency_ms']
+                ave_latency.append(latency_ms)
                 # update LED
                 update_led(pred_label)
                 # terminal view
                 log_queue.put(f"===> Prediction: {pred_label}")
                 log_queue.put(f"===> Used Layers - RGB: {int(rgb_layers)} Depth: {int(depth_layers)}")
-                log_queue.put(f"===> Latency: {latency_ms:.1f} ms")
+                log_queue.put(f"===> Latency: {lat_all:.1f} ms")
                 log_queue.put("=========================================================")
                 
                 # chart view
@@ -172,7 +181,7 @@ def camera(shm_name, shape, dtype_str, num_slots,inference_start, inference_ende
                     shared_state["frame"] = combined_camera.copy()
                     shared_state["layer_rgb"] = rgb_layers
                     shared_state["layer_depth"] = depth_layers
-                    shared_state["last_result"] = f"Pred: {pred_label} | RGB: {int(rgb_layers)} | Depth: {int(depth_layers)} | {latency_ms:.1f} ms"
+                    shared_state["last_result"] = f"Pred: {pred_label} | RGB: {int(rgb_layers)} | Depth: {int(depth_layers)} | {lat_all:.1f} ms"
         
             
             if time() - last_capture_time >= PIC_INTERVAL: # inference time
@@ -183,10 +192,14 @@ def camera(shm_name, shape, dtype_str, num_slots,inference_start, inference_ende
                 rgb_target[:] = color_image
                 depth_target[:] = depth_colormap
                 inference_start.set()
-                        
+                inference_ended.wait()
+                lat_all = (time()-last_capture_time)*1000                         
     finally:
         if is_pipeline_active:
             pipeline.stop()
         inference_start.set()  # in case inference is waiting
         reset_gpio()
+        shm.close()
+        latency = sum(ave_latency)/len(ave_latency) 
+        print(f'average latency: {latency:.2f} ms')
     

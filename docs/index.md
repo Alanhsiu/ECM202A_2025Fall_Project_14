@@ -488,31 +488,31 @@ The controller learned strong corruption-aware allocation patterns:
 
 ### Challenge
 1. **Dataset Size** Integrating legacy RGB-D camera (L515) with the RPi 5
-* Lack of online documentation/resource regarding this hardware combination
-* Dependency conflicts: Version mismatches among librealsense, pyrealsense, Python, and other libraries
+    * Lack of online documentation/resource regarding this hardware combination
+    * Dependency conflicts: Version mismatches among librealsense, pyrealsense, Python, and other libraries
 2. **System Challenge**: Overhead from adding audio and UI features
-* System latency increased after adding audio monitoring and UI rendering.
-* Audio thread requires continuous sound polling, creating constant CPU load.
-* UI thread reads shared results at high frequency, adding contention.
-* Camera + inference need stable real-time performance but were often blocked.
+    * System latency increased after adding audio monitoring and UI rendering.
+    * Audio thread requires continuous sound polling, creating constant CPU load.
+    * UI thread reads shared results at high frequency, adding contention.
+    * Camera + inference need stable real-time performance but were often blocked.
 
 
 ### Concurrency
 We try out different structure to solve the challenge we faced.
 1. **Single thread**
-* Camera trigger causes audio sampling rate to drop.
-* UI cannot update consistently (e.g., CPU usage display becomes unstable).
-* Overall system responsiveness degrades.
+    * Camera trigger causes audio sampling rate to drop.
+    * UI cannot update consistently (e.g., CPU usage display becomes unstable).
+    * Overall system responsiveness degrades.
 2. **Multi thread** → best performance
-* Camera, audio, inference, and UI run concurrently with minimal blocking.
-* UI remains smooth and responsive.
-* Best balance of responsiveness and latency.
+    * Camera, audio, inference, and UI run concurrently with minimal blocking.
+    * UI remains smooth and responsive.
+    * Best balance of responsiveness and latency.
 ![multi thread code structure](./assets/img/thread_level_pipeline.png)
 3. **Multi process**
-* Afraid of frequently context switch will lower the performance of inference
-* UI and audio get more CPU time since inference runs separately.
-* But inference already uses all CPU cores internally (PyTorch multithreading).
-* Extra process overhead adds latency, giving no real performance benefit.
+    * Afraid of frequently context switch will lower the performance of inference
+    * UI and audio get more CPU time since inference runs separately.
+    * But inference already uses all CPU cores internally (PyTorch multithreading).
+    * Extra process overhead adds latency, giving no real performance benefit.
 ![multiprocess code structure](./assets/img/multiprocess.png)
 
 ## Evaluation

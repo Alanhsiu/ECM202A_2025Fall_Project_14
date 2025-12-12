@@ -93,7 +93,9 @@ The main challenges we addressed:
 2. **Quality Assessment**: Defining and learning "quality" without explicit labels. We used corruption-type supervision as a proxy.
 3. **Two-Stage Stability**: Ensuring the adaptive controller doesn't degrade the pre-trained backbone performance. We froze backbone weights in Stage 2.
 4. **Edge Deployment**: Achieving real-time inference on Raspberry Pi 5 with limited memory and no GPU acceleration.
-5. **Data Collection**: Building a balanced dataset with controlled corruption types for training and evaluation.
+5. **System-Level Overhead from Multi-Modal Integration**: Audio monitoring and real-time UI increased system overhead, which we mitigated by evaluating alternative concurrency structures (multi-thread vs. multi-process).
+6. **Hardware and Software Compatibility Issues**: Integrating the legacy Intel RealSense L515 with Raspberry Pi 5 was challenging due to limited documentation. Further difficulties arose from dependency and version mismatches.
+7. **Data Collection**: Building a balanced dataset with controlled corruption types for training and evaluation.
 
 ## **1.6 Metrics of Success**
 
@@ -466,6 +468,9 @@ The controller learned strong corruption-aware allocation patterns:
 ### Allocation Heatmap
 ![Allocation Heatmap](assets/img/baseline_allocation_heatmap.png)
 
+### Edge Device Performance
+![realtime performance](./assets/img/edgedevice.png)
+
 ## Per-Class Performance (Stage 2, 12L)
 
 | Class | Clean | Depth Occluded | Low Light |
@@ -479,35 +484,41 @@ The controller learned strong corruption-aware allocation patterns:
 
 # **5. Discussion & Conclusions**
 
-## What Worked Well
+## Discussion
 
-1. **Corruption-Aware Allocation**: The controller successfully learned to shift computation to the reliable modality (11:1 ratios in corrupted conditions)
+### Challenge
+1. **Dataset Size** Integrating legacy RGB-D camera (L515) with the RPi 5
+    * Lack of online documentation/resource regarding this hardware combination
+    * Dependency conflicts: Version mismatches among librealsense, pyrealsense, Python, and other libraries
+2. **System Challenge**: Overhead from adding audio and UI features
+    * System latency increased after adding audio monitoring and UI rendering.
+    * Audio thread requires continuous sound polling, creating constant CPU load.
+    * UI thread reads shared results at high frequency, adding contention.
+    * Camera + inference need stable real-time performance but were often blocked.
 
-2. **Two-Stage Training**: Separating feature learning from allocation learning prevented optimization instabilities and preserved backbone performance
 
-3. **Straight-Through Estimator**: Critical for gradient flow through discrete allocation decisions; without STE, the allocation module could not learn
+### Concurrency
+We try out different structure to solve the challenge we faced.
+1. **Single thread**
+    * Camera trigger causes audio sampling rate to drop.
+    * UI cannot update consistently (e.g., CPU usage display becomes unstable).
+    * Overall system responsiveness degrades.
+2. **Multi thread** → best performance
+    * Camera, audio, inference, and UI run concurrently with minimal blocking.
+    * UI remains smooth and responsive.
+    * Best balance of responsiveness and latency.
+![multi thread code structure](./assets/img/thread_level_pipeline.png)
+3. **Multi process**
+    * Afraid of frequently context switch will lower the performance of inference
+    * UI and audio get more CPU time since inference runs separately.
+    * But inference already uses all CPU cores internally (PyTorch multithreading).
+    * Extra process overhead adds latency, giving no real performance benefit.
+![multiprocess code structure](./assets/img/multiprocess.png)
 
-4. **Edge Deployment**: Achieved practical latency (<1s) on Raspberry Pi 5 with 8-12 layer budgets
+## Evaluation
+The chart shows that multithreading achieves lower latency than multiprocessing in all cases.
+![Evaluation between multi process and multi thread](./assets/img/evaluation_stru.png)
 
-5. **Data as Regularization**: The corrupted data itself provided strong regularization, eliminating the need for additional techniques like weight decay or label smoothing
-
-## What Didn't Work
-
-1. **Very Low Budgets (4-6 layers)**: Performance degraded significantly below 8 layers, suggesting a minimum computational requirement for this task
-
-2. **Uniform Allocation**: Fixed 6/6 split performed worse than both RGB-only and Depth-only, indicating that modality quality matters more than equal representation
-
-3. **Initial Controller Attempts**: Early experiments without frozen backbones in Stage 2 led to feature degradation
-
-## Limitations
-
-1. **Dataset Size**: 600 samples is relatively small; more data could improve generalization
-
-2. **Corruption Types**: Only tested depth occlusion and low light; other corruptions (motion blur, sensor noise) not evaluated
-
-3. **Gesture Vocabulary**: 4 classes is limited for practical applications
-
-4. **Latency on Edge**: While <1s is acceptable, real-time applications may require further optimization
 
 ## Future Directions
 

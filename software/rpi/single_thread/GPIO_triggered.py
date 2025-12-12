@@ -20,8 +20,8 @@ from gpiozero import LED
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.adaptive_controller import AdaptiveGestureClassifier
-from data.gesture_dataset import single_image_transform
-from data.gesture_dataset import transform_from_camera
+from gesture_dataset import single_image_transform
+from gesture_dataset import transform_from_camera
 
 class_names = ['standing', 'left_hand', 'right_hand', 'both_hands']
 

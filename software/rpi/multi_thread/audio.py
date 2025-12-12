@@ -39,8 +39,15 @@ CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
-
 # ---- Audio RMS Calculation ----
+def flush_stream(stream, duration=0.2):
+    frames = int(duration * RATE / CHUNK)
+    for _ in range(frames):
+        try:
+            stream.read(CHUNK, exception_on_overflow=False)
+        except:
+            pass
+
 def get_audio_rms(stream):
     try:
         data = stream.read(CHUNK, exception_on_overflow=False)
@@ -53,6 +60,9 @@ def get_audio_rms(stream):
 # ---- Audio Listener Thread ----
 def audio_listener():
     p = pyaudio.PyAudio()
+    camera_ready.wait()
+    log_queue.put('Camera is ready')
+    audio_start_time = time.time()-TOGGLE_COOLDOWN
     stream = p.open(
         format=FORMAT, 
         channels=CHANNELS, 
@@ -60,13 +70,12 @@ def audio_listener():
         input=True,             
         frames_per_buffer=CHUNK
     )
-    camera_ready.wait()
-    log_queue.put('Camera is ready')
-    audio_start_time = time.time()-TOGGLE_COOLDOWN
+
     try:
         while True:
             if stop_event.is_set():
                 break
+            flush_stream(stream, duration=0.1)
             current_rms = get_audio_rms(stream)
             if(current_rms > AUDIO_THRESHOLD):
                 if(time.time() - audio_start_time < TOGGLE_COOLDOWN): #  Avoid rapid toggling
@@ -80,6 +89,7 @@ def audio_listener():
                     log_queue.put("Audio trigger detected: STOP camera")    
                     camera_event.clear()
                     audio_start_time = time.time()
+            time.sleep(0.1)
     finally:
         stream.stop_stream()
         stream.close()

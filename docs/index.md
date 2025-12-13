@@ -465,6 +465,9 @@ The controller learned strong corruption-aware allocation patterns:
 ### Dynamic Allocation Patterns
 ![Dynamic Allocations](assets/img/baseline_dynamic_allocations.png)
 
+* **Adaptive Compensation:** Under corrupted conditions, the controller acts as expected by shifting resources away from the noisy modality. In **Low Light**, the model minimizes RGB usage and relies heavily on Depth layers. Conversely, in **Depth Occluded** scenarios, the model penalizes the depth channel and prioritizes the RGB backbone.
+* **Marginal Utility & Saturation (Clean Data):** In **Clean** conditions, the model favors RGB layers at lower budgets (4–8 layers) due to the higher information density of visual data. However, at the maximum budget (12 layers), the allocation becomes more balanced. As TA Jason Wu suggested, this is likely due to **diminishing returns** in the visual encoder; after receiving approximately 6 layers, the marginal utility of additional RGB layers decreases. Consequently, the controller allocates the surplus budget to Depth, as further saturating the RGB backbone provides negligible improvement to the loss.
+
 ### Allocation Heatmap
 ![Allocation Heatmap](assets/img/baseline_allocation_heatmap.png)
 
